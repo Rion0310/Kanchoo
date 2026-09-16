@@ -202,7 +202,7 @@ function handleMessage(socket, message) {
             room.spectators.delete(socket);
             broadcastRoom(room);
             return;
-        
+        }
 
         if (table === "spectator") {
             // すでにPLAYERとして割り当てられている接続を
@@ -216,12 +216,10 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "room_ready") {
-        // READY状態は接続中のソケット自身のPLAYER番号を基準に更新する。
-        // クライアントからplayerNumber/nameが送られてきても、それを信用しない。
         if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
             send(socket, {
                 type: "room_error",
-                message: "PLAYERとして参加していないためREADYにできません。"
+                message: "PLAYERとして参加していません。"
             });
             return;
         }
@@ -229,7 +227,6 @@ function handleMessage(socket, message) {
         const index = socket.playerNumber - 1;
         const player = room.battlePlayers[index];
 
-        // 現在のPLAYER枠と接続を照合。
         if (!player || player.name !== socket.playerName) {
             send(socket, {
                 type: "room_error",
@@ -238,14 +235,8 @@ function handleMessage(socket, message) {
             return;
         }
 
-        // true/falseを明示的に受け取り、文字列"true"にも対応する。
-        const ready =
-            data.ready === true ||
-            data.ready === "true";
+        player.ready = data.ready === true || data.ready === "true";
 
-        player.ready = ready;
-
-        // パーティーはREADY時に送られてきたものだけ確定。
         if (Array.isArray(data.party)) {
             player.party = data.party
                 .map(Number)
@@ -253,10 +244,11 @@ function handleMessage(socket, message) {
                 .slice(0, 6);
         }
 
-        // READY更新を即座に全クライアントへ同期。
-        broadcastRoom(room);
+        console.log(
+            `[READY] room=${room.roomId} player=${socket.playerNumber} name=${socket.playerName} ready=${player.ready}`
+        );
 
-        // 両PLAYERがREADYならbattle_startを送る。
+        broadcastRoom(room);
         sendBattleStart(room);
         return;
     }
@@ -335,7 +327,7 @@ function handleMessage(socket, message) {
         }
 
         return;
-    }}
+    }
 }
 
 const server = http.createServer((req, res) => {
