@@ -121,8 +121,6 @@
 
     let myPlayerNumber = 0;
 
-    let myReady = false;
-
     let battleStartedHandled =
         false;
 
@@ -556,12 +554,6 @@
                         receivedPlayerNumber;
                 }
 
-                resolveMyPlayerNumber();
-
-                if (myPlayerNumber === 1 || myPlayerNumber === 2) {
-                    myReady = !!roomState.battlePlayers?.[myPlayerNumber - 1]?.ready;
-                }
-
                 renderRoom();
 
                 break;
@@ -577,13 +569,19 @@
                 battleStartedHandled =
                     true;
 
-                const myPlayer =
+                const matchedPlayer =
                     message.players?.find(
                         player =>
                             player.name ===
                             playerName
-                    )?.player ||
-                    myPlayerNumber;
+                    );
+
+                const myPlayer =
+                    Number(matchedPlayer?.player) === 2
+                        ? 2
+                        : Number(matchedPlayer?.player) === 1
+                            ? 1
+                            : myPlayerNumber;
 
                 window.location.href =
                     `../battle/battle.html?room=${encodeURIComponent(
@@ -623,20 +621,19 @@
                 index
             ]?.ready;
 
-        myReady = !currentReady;
+        const party = getParty();
 
-        renderRoom();
-
-        const sent = send({
-            type: "room_ready",
-            ready: myReady,
-            party: getParty()
-        });
-
-        if (!sent) {
-            myReady = currentReady;
-            renderRoom();
+        // READYにする瞬間は、現在の出撃パーティを必ずサーバーへ保存する。
+        if (!currentReady && party.length === 0) {
+            window.alert("出撃パーティを1体以上選択してください。");
+            return;
         }
+
+        send({
+            type: "room_ready",
+            ready: !currentReady,
+            party
+        });
     }
 
     /*

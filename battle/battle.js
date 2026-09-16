@@ -213,10 +213,13 @@ function connectOnlineBattle() {
              * PLAYER 2の接続でもPLAYER 1用のpartyを送る等の
              * 上書きが起きるため、partyは送信しません。
              */
+            const localParty = loadPlayer1Party();
+
             onlineSocket.send(JSON.stringify({
                 type: "battle_join",
                 roomId: ONLINE_ROOM_ID,
-                player: MY_PLAYER_NUMBER
+                player: MY_PLAYER_NUMBER,
+                party: localParty
             }));
 
             return;
