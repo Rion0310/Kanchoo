@@ -95,11 +95,11 @@ function serializeBattleState() {
         movedUnits: [...battleState.movedUnits],
         actionPhase: battleState.actionPhase,
         skillPhase: battleState.skillPhase,
-        skillStep: battleState.skillStep ?? null,
         skillDirection: battleState.skillDirection,
         skillTargetCells: battleState.skillTargetCells,
         skillSelectedTargetCells: battleState.skillSelectedTargetCells,
         selectedSkillId: battleState.selectedSkillId,
+        skillStep: battleState.skillStep,
         gameOver: battleState.gameOver,
         battleLogs: battleState.battleLogs,
         bluffUnits: [...battleState.bluffUnits],
@@ -139,7 +139,6 @@ function applyOnlineState(state) {
         new Set(Array.isArray(state.movedUnits) ? state.movedUnits : []);
     battleState.actionPhase = state.actionPhase ?? null;
     battleState.skillPhase = state.skillPhase ?? null;
-    battleState.skillStep = state.skillStep ?? null;
     battleState.skillDirection = state.skillDirection ?? null;
     battleState.skillTargetCells =
         Array.isArray(state.skillTargetCells)
@@ -197,10 +196,8 @@ function connectOnlineBattle() {
         }
 
         if (message.type === "room_connected") {
-            // PLAYER番号はURLよりサーバーの割り当てを優先する。
-            const serverPlayerNumber = Number(message.playerNumber);
-            if (serverPlayerNumber === 1 || serverPlayerNumber === 2) {
-                MY_PLAYER_NUMBER = serverPlayerNumber;
+            if (Number(message.playerNumber) === 1 || Number(message.playerNumber) === 2) {
+                MY_PLAYER_NUMBER = Number(message.playerNumber);
             }
 
             /*
@@ -228,6 +225,10 @@ function connectOnlineBattle() {
         }
 
         if (message.type === "battle_start") {
+            if (onlineBattleStarted) {
+                return;
+            }
+
             const players = message.players || [];
 
             const player1 = players.find(
@@ -237,12 +238,6 @@ function connectOnlineBattle() {
                 player => Number(player.player) === 2
             );
 
-            // battle_startは全員に届くため、各クライアントで一度だけ初期化する。
-            if (onlineBattleStarted) {
-                return;
-            }
-            onlineBattleStarted = true;
-
             /*
              * [PARTY FIX 4: battle_startのpartyを唯一の初期値にする]
              *
@@ -250,21 +245,19 @@ function connectOnlineBattle() {
              * createUnits()より前に反映します。
              */
             if (Array.isArray(player1?.party)) {
-                onlineParty1 = [...player1.party];
+                onlineParty1 = player1.party.map(Number).filter(Number.isFinite).slice(0, 6);
             }
 
             if (Array.isArray(player2?.party)) {
-                onlineParty2 = [...player2.party];
+                onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, 6);
             }
+
+            onlineBattleStarted = true;
 
             createUnits();
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
-
-            // 初期battle_stateを送るのはPLAYER 1だけ。
-            // P2も送るとserver.jsのexpectedPlayer=1と競合して
-            // ターン同期が不安定になるため。
             if (MY_PLAYER_NUMBER === 1) {
                 onlineSendState();
             }
