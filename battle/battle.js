@@ -3642,15 +3642,7 @@ function initialize() {
 
     ensureBattleLog();
 
-    /*
-     * オンライン対戦では、サーバーからP1/P2のpartyを
-     * 受信するまでユニットを生成しない。
-     *
-     * ローカル対戦だけ従来どおり即時生成する。
-     */
-    if (!ONLINE_ROOM_ID) {
-        createUnits();
-    }
+    createUnits();
 
     /*
      * 初期配置を盤面へ表示

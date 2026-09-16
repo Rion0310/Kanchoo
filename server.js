@@ -443,14 +443,20 @@ wss.on("connection", socket => {
         room.sockets.delete(socket);
         room.spectators.delete(socket);
 
-        if (
-            (socket.playerNumber === 1 || socket.playerNumber === 2) &&
-            !room.battleStarted
-        ) {
+        if (socket.playerNumber === 1 || socket.playerNumber === 2) {
             const index = socket.playerNumber - 1;
             const player = room.battlePlayers[index];
 
-            if (player.name === socket.playerName) {
+            /*
+             * ROOM -> BATTLE の画面遷移では、ROOM側のWebSocketが
+             * 一度切断されてからBATTLE側が再接続します。
+             * その瞬間にpartyを消すとBATTLEが取得できなくなるため、
+             * battleStarted後はプレイヤー情報を保持します。
+             */
+            if (
+                player.name === socket.playerName &&
+                !room.battleStarted
+            ) {
                 player.name = "";
                 player.ready = false;
                 player.party = [];
@@ -458,11 +464,8 @@ wss.on("connection", socket => {
         }
 
         /*
-         * ROOM → BATTLE遷移では、ROOM側のWebSocketが先に閉じても
-         * BATTLE側が再接続するまでルーム情報を保持する。
-         *
-         * battleStarted後にplayer.partyを消すと、BATTLE側が
-         * battle_joinしてもP1/P2のパーティを取得できなくなる。
+         * battleStarted後はBATTLE側の再接続を待つ必要があるため、
+         * 接続が一時的に0本になってもROOMを破棄しません。
          */
         if (room.sockets.size === 0) {
             if (!room.battleStarted) {
