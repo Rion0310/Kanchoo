@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MONSTER WAR - Party Select</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <audio id="bgm" src="../audio/CanChoke.mp3" loop></audio>
+    <div class="party-screen">
+
+        <!-- =========================
+            ヘッダー
+        ========================== -->
+
+        <header class="screen-header">
+
+            <div class="title">
+                MONSTER WAR
+            </div>
+
+            <div class="subtitle">
+                PARTY SELECT
+            </div>
+
+        </header>
+
+
+        <!-- =========================
+            メイン
+        ========================== -->
+
+        <main class="main-area">
+
+
+            <!-- =========================
+                左：出撃パーティ
+            ========================== -->
+
+            <section class="party-panel">
+
+                <div class="panel-header">
+
+                    <h2>
+                        出撃パーティ
+                    </h2>
+
+                    <span id="party-count">
+                        0 / 6
+                    </span>
+
+                </div>
+
+
+                <div id="party-list" class="party-list">
+                    <!-- JSで生成 -->
+                </div>
+
+
+                <div class="party-help">
+
+                    ボックスからモンスターを選択し、<br>
+                    パーティに追加してください。
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =========================
+                右側
+            ========================== -->
+
+            <section class="right-area">
+
+
+                <!-- =====================
+                    キャラクターボックス
+                ====================== -->
+
+                <section class="box-panel">
+
+                    <div class="panel-header">
+
+                        <h2>
+                            キャラクターボックス
+                        </h2>
+
+                        <span id="box-count">
+                            0体
+                        </span>
+
+                    </div>
+
+
+                    <!-- この部分だけスクロール -->
+                    <div
+                        id="character-box"
+                        class="character-box"
+                    >
+                        <!-- JSで生成 -->
+                    </div>
+
+                </section>
+
+
+
+                <!-- =====================
+                    選択モンスター
+                ====================== -->
+
+                <section class="detail-panel">
+
+
+                    <div
+                        id="detail-icon"
+                        class="detail-icon"
+                    >
+                        ―
+                    </div>
+
+
+                    <div class="detail-main">
+
+                        <div class="detail-name-row">
+
+                            <h2 id="detail-name">
+                                モンスター未選択
+                            </h2>
+
+                        </div>
+
+
+                        <div class="detail-stats">
+
+                            <div class="stat">
+
+                                <span>
+                                    HP
+                                </span>
+
+                                <strong id="detail-hp">
+                                    -
+                                </strong>
+
+                            </div>
+
+
+                            <div class="stat">
+
+                                <span>
+                                    攻撃
+                                </span>
+
+                                <strong id="detail-attack">
+                                    -
+                                </strong>
+
+                            </div>
+
+
+                            <div class="stat">
+
+                                <span>
+                                    防御
+                                </span>
+
+                                <strong id="detail-defense">
+                                    -
+                                </strong>
+
+                            </div>
+
+
+                            <div class="stat">
+
+                                <span>
+                                    移動
+                                </span>
+
+                                <strong id="detail-move">
+                                    -
+                                </strong>
+
+                            </div>
+
+                        </div>
+
+
+                        <p id="detail-description">
+
+                            モンスターを選択してください。
+
+                        </p>
+
+
+                        <!-- =====================
+                            技一覧
+                        ====================== -->
+
+                        <div class="skills-section">
+
+                            <div class="skills-title">
+                                所持技
+                            </div>
+
+
+                            <div
+                                id="detail-skills"
+                                class="detail-skills"
+                            >
+                                <div class="skill-empty">
+                                    モンスターを選択してください。
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="detail-action">
+
+                        <button
+                            id="add-button"
+                            disabled
+                        >
+                            パーティに追加
+                        </button>
+
+
+                        <button
+                            id="remove-button"
+                            disabled
+                        >
+                            パーティから外す
+                        </button>
+
+                    </div>
+
+                </section>
+
+            </section>
+
+        </main>
+
+
+
+        <!-- =========================
+            フッター
+        ========================== -->
+
+        <footer class="screen-footer">
+
+            <button id="clear-button">
+                パーティをリセット
+            </button>
+
+
+            <button
+                id="confirm-button"
+                disabled
+            >
+                出撃決定
+            </button>
+
+        </footer>
+
+    </div>
+
+
+    <script src="../database/game-data.js"></script>
+    <script src="script.js"></script>
+
+</body>
+
+</html>

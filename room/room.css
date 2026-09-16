@@ -1,0 +1,956 @@
+
+/* ========================================
+   MONSTER WAR
+   ROOM SCREEN CSS
+======================================== */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    overflow: hidden;
+    background: #080808;
+    color: #ffffff;
+    font-family:
+        "Yu Gothic",
+        "Hiragino Kaku Gothic ProN",
+        Meiryo,
+        sans-serif;
+}
+
+
+/* ========================================
+   ルーム画面
+======================================== */
+
+.room-screen {
+    position: relative;
+    width: 100%;
+    height: 100dvh;
+    min-height: 500px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    padding:
+        clamp(20px, 4vh, 45px)
+        clamp(15px, 4vw, 60px)
+        clamp(25px, 5vh, 50px);
+
+    background:
+        radial-gradient(
+            circle at center,
+            #222 0%,
+            #111 35%,
+            #080808 75%,
+            #000 100%
+        );
+}
+
+
+/* ========================================
+   背景エフェクト
+======================================== */
+
+.room-screen::before {
+    content: "";
+
+    position: fixed;
+
+    top: 50%;
+    left: 50%;
+
+    width: min(80vw, 80vh);
+    height: min(80vw, 80vh);
+
+    transform: translate(-50%, -50%);
+
+    border: 1px solid rgba(255, 255, 255, 0.06);
+
+    border-radius: 50%;
+
+    box-shadow:
+        0 0 80px rgba(255, 255, 255, 0.04),
+        inset 0 0 80px rgba(255, 255, 255, 0.03);
+
+    pointer-events: none;
+}
+
+.room-screen::after {
+    content: "";
+
+    position: fixed;
+
+    inset: 0;
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent 49.9%,
+            rgba(255, 255, 255, 0.025) 50%,
+            transparent 50.1%
+        ),
+        linear-gradient(
+            0deg,
+            transparent 49.9%,
+            rgba(255, 255, 255, 0.025) 50%,
+            transparent 50.1%
+        );
+
+    background-size: 80px 80px;
+
+    opacity: 0.25;
+
+    pointer-events: none;
+}
+
+
+/* ========================================
+   ヘッダー
+======================================== */
+
+.room-header {
+    position: relative;
+
+    z-index: 2;
+
+    width: min(900px, 100%);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    margin-bottom: clamp(18px, 3vh, 30px);
+}
+
+.room-game-title {
+    font-size: clamp(10px, 1.2vw, 13px);
+
+    font-weight: 900;
+
+    letter-spacing: 0.35em;
+
+    color: #777;
+
+    margin-bottom: 8px;
+}
+
+.room-title {
+    font-size: clamp(28px, 5vw, 52px);
+
+    font-weight: 900;
+
+    letter-spacing: 0.15em;
+
+    line-height: 1;
+
+    color: #ffffff;
+
+    text-shadow:
+        0 0 15px rgba(255, 255, 255, 0.15),
+        0 0 40px rgba(255, 255, 255, 0.05);
+}
+
+
+/* ========================================
+   共通セクション
+======================================== */
+
+.player-section,
+.room-info-section,
+.table-section,
+.selection-section,
+.action-section {
+    position: relative;
+
+    z-index: 2;
+
+    width: min(900px, 100%);
+}
+
+
+/* ========================================
+   プレイヤー情報
+======================================== */
+
+.player-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 15px;
+
+    margin-bottom: 8px;
+}
+
+.section-label {
+    font-size: clamp(8px, 1vw, 10px);
+
+    font-weight: 700;
+
+    letter-spacing: 0.3em;
+
+    color: #666;
+
+    white-space: nowrap;
+}
+
+.player-name {
+    min-width: 100px;
+
+    padding: 5px 15px;
+
+    border-bottom: 1px solid #333;
+
+    text-align: center;
+
+    font-size: clamp(13px, 1.5vw, 16px);
+
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+
+    color: #ddd;
+}
+
+
+/* ========================================
+   ルームID
+======================================== */
+
+.room-info-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 15px;
+
+    margin-bottom: clamp(18px, 3vh, 28px);
+}
+
+.room-id {
+    min-width: 110px;
+
+    padding: 5px 14px;
+
+    border: 1px solid #333;
+
+    background: rgba(20, 20, 20, 0.75);
+
+    text-align: center;
+
+    font-family:
+        "Consolas",
+        "Courier New",
+        monospace;
+
+    font-size: clamp(12px, 1.5vw, 16px);
+
+    font-weight: 700;
+
+    letter-spacing: 0.15em;
+
+    color: #aaa;
+}
+
+
+/* ========================================
+   卓選択
+======================================== */
+
+.table-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.table-section > .section-label {
+    margin-bottom: 10px;
+}
+
+
+/* ========================================
+   卓カード
+======================================== */
+
+.table-card {
+    position: relative;
+
+    width: 100%;
+
+    min-height: 145px;
+
+    margin: 0 0 12px;
+
+    padding: clamp(15px, 2vw, 22px);
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    border: 1px solid #333;
+
+    background: rgba(18, 18, 18, 0.9);
+
+    color: #ffffff;
+
+    cursor: pointer;
+
+    text-align: left;
+
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.table-card::before {
+    content: "";
+
+    position: absolute;
+
+    inset: 5px;
+
+    border: 1px solid transparent;
+
+    pointer-events: none;
+
+    transition: border-color 0.15s ease;
+}
+
+.table-card:hover {
+    transform: translateY(-2px);
+
+    background: #222;
+
+    border-color: #666;
+
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.table-card:hover::before {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+
+/* ========================================
+   選択状態
+======================================== */
+
+.table-card.selected {
+    border-color: #ffffff;
+
+    background: #252525;
+
+    box-shadow:
+        0 0 25px rgba(255, 255, 255, 0.06);
+}
+
+.table-card.selected::before {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+
+/* ========================================
+   卓ヘッダー
+======================================== */
+
+.table-card-header {
+    display: flex;
+
+    align-items: baseline;
+
+    justify-content: space-between;
+
+    gap: 15px;
+
+    margin-bottom: 15px;
+}
+
+.table-name {
+    font-size: clamp(18px, 2.5vw, 25px);
+
+    font-weight: 900;
+
+    letter-spacing: 0.1em;
+}
+
+.table-type {
+    font-size: clamp(7px, 0.9vw, 10px);
+
+    font-weight: 700;
+
+    letter-spacing: 0.25em;
+
+    color: #666;
+}
+
+
+/* ========================================
+   対戦プレイヤー
+======================================== */
+
+.battle-players {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        auto
+        minmax(0, 1fr);
+
+    align-items: center;
+
+    gap: clamp(12px, 3vw, 35px);
+
+    width: 100%;
+}
+
+.battle-player {
+    min-width: 0;
+
+    padding: 10px;
+
+    border: 1px solid #292929;
+
+    background: rgba(8, 8, 8, 0.6);
+
+    text-align: center;
+}
+
+.player-number {
+    margin-bottom: 5px;
+
+    font-size: 8px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.2em;
+
+    color: #555;
+}
+
+.battle-player-name {
+    overflow: hidden;
+
+    white-space: nowrap;
+
+    text-overflow: ellipsis;
+
+    font-size: clamp(12px, 1.5vw, 16px);
+
+    font-weight: 700;
+
+    color: #ddd;
+}
+
+.ready-status {
+    margin-top: 5px;
+
+    font-size: 7px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.2em;
+
+    color: #555;
+}
+
+.ready-status.ready {
+    color: #ffffff;
+}
+
+.vs-mark {
+    font-size: clamp(12px, 1.8vw, 18px);
+
+    font-weight: 900;
+
+    font-style: italic;
+
+    color: #555;
+
+    letter-spacing: 0.1em;
+}
+
+
+/* ========================================
+   卓説明
+======================================== */
+
+.table-description {
+    margin-top: 12px;
+
+    font-size: clamp(8px, 1vw, 10px);
+
+    letter-spacing: 0.12em;
+
+    color: #555;
+
+    text-align: center;
+}
+
+
+/* ========================================
+   観戦情報
+======================================== */
+
+.spectator-info {
+    display: flex;
+
+    align-items: baseline;
+
+    justify-content: center;
+
+    gap: 10px;
+
+    min-height: 55px;
+}
+
+.spectator-count {
+    font-family:
+        "Consolas",
+        "Courier New",
+        monospace;
+
+    font-size: clamp(30px, 4vw, 42px);
+
+    font-weight: 900;
+
+    line-height: 1;
+
+    color: #ddd;
+}
+
+.spectator-label {
+    font-size: clamp(8px, 1vw, 10px);
+
+    font-weight: 700;
+
+    letter-spacing: 0.2em;
+
+    color: #555;
+}
+
+
+/* ========================================
+   選択中
+======================================== */
+
+.selection-section {
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    margin-top: 8px;
+
+    margin-bottom: 18px;
+}
+
+.selection-section .section-label {
+    margin-bottom: 7px;
+}
+
+.selected-table {
+    width: 100%;
+
+    min-height: 32px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 7px 15px;
+
+    border-top: 1px solid #222;
+
+    border-bottom: 1px solid #222;
+
+    font-size: clamp(10px, 1.2vw, 13px);
+
+    font-weight: 700;
+
+    letter-spacing: 0.12em;
+
+    color: #666;
+}
+
+.selected-table.active {
+    color: #ffffff;
+}
+
+
+/* ========================================
+   操作ボタン
+======================================== */
+
+.action-section {
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 12px;
+
+    margin-bottom: 18px;
+}
+
+.action-button {
+    position: relative;
+
+    width: clamp(150px, 25vw, 230px);
+
+    height: clamp(65px, 9vh, 85px);
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 5px;
+
+    border: 1px solid #444;
+
+    background: rgba(20, 20, 20, 0.92);
+
+    color: #ffffff;
+
+    cursor: pointer;
+
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease,
+        border-color 0.15s ease,
+        opacity 0.15s ease;
+}
+
+.action-button::before {
+    content: "";
+
+    position: absolute;
+
+    inset: 5px;
+
+    border: 1px solid transparent;
+
+    pointer-events: none;
+
+    transition: border-color 0.15s ease;
+}
+
+.action-button:hover:not(:disabled) {
+    transform: translateY(-3px);
+
+    background: #252525;
+
+    border-color: #ffffff;
+}
+
+.action-button:hover:not(:disabled)::before {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.action-button:active:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.action-button:disabled {
+    opacity: 0.3;
+
+    cursor: not-allowed;
+}
+
+.button-label {
+    font-size: clamp(17px, 2vw, 23px);
+
+    font-weight: 900;
+
+    letter-spacing: 0.15em;
+}
+
+.button-subtitle {
+    font-size: 7px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.3em;
+
+    color: #666;
+}
+
+
+/* ========================================
+   接続状態
+======================================== */
+
+.connection-status {
+    position: relative;
+
+    z-index: 2;
+
+    margin-top: auto;
+
+    padding-top: 5px;
+
+    font-size: 7px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.25em;
+
+    color: #444;
+
+    text-align: center;
+}
+
+.connection-status.connected {
+    color: #777;
+}
+
+.connection-status.error {
+    color: #aaa;
+}
+
+
+/* ========================================
+   小さい画面
+======================================== */
+
+@media (max-width: 700px) {
+
+    .room-screen {
+        padding:
+            18px
+            12px
+            25px;
+    }
+
+    .room-header {
+        margin-bottom: 15px;
+    }
+
+    .room-title {
+        font-size: clamp(25px, 8vw, 40px);
+
+        letter-spacing: 0.1em;
+    }
+
+    .player-section,
+    .room-info-section {
+        gap: 10px;
+    }
+
+    .table-card {
+        min-height: 130px;
+
+        padding: 13px;
+    }
+
+    .battle-players {
+        gap: 8px;
+    }
+
+    .battle-player {
+        padding: 7px 5px;
+    }
+
+    .action-button {
+        width: min(45vw, 200px);
+
+        height: 65px;
+    }
+
+}
+
+
+/* ========================================
+   横幅がかなり狭い場合
+======================================== */
+
+@media (max-width: 450px) {
+
+    .table-card-header {
+        flex-direction: column;
+
+        align-items: flex-start;
+
+        gap: 3px;
+    }
+
+    .battle-players {
+        gap: 5px;
+    }
+
+    .vs-mark {
+        font-size: 11px;
+    }
+
+    .battle-player-name {
+        font-size: 10px;
+    }
+
+    .ready-status {
+        font-size: 6px;
+    }
+
+    .table-description {
+        font-size: 7px;
+    }
+
+    .action-section {
+        gap: 8px;
+    }
+
+    .action-button {
+        width: 46vw;
+    }
+
+}
+
+
+/* ========================================
+   画面の高さが低い場合
+======================================== */
+
+@media (max-height: 650px) {
+
+    .room-screen {
+        padding-top: 15px;
+    }
+
+    .room-header {
+        margin-bottom: 10px;
+    }
+
+    .room-game-title {
+        margin-bottom: 4px;
+    }
+
+    .room-title {
+        font-size: clamp(25px, 7vh, 38px);
+    }
+
+    .room-info-section {
+        margin-bottom: 12px;
+    }
+
+    .table-card {
+        min-height: 110px;
+
+        margin-bottom: 8px;
+
+        padding: 10px;
+    }
+
+    .table-card-header {
+        margin-bottom: 8px;
+    }
+
+    .battle-player {
+        padding: 5px;
+    }
+
+    .table-description {
+        margin-top: 7px;
+    }
+
+    .selection-section {
+        margin-top: 3px;
+
+        margin-bottom: 10px;
+    }
+
+    .action-button {
+        height: 55px;
+    }
+
+}
+
+
+/* ========================================
+   さらに低い画面
+======================================== */
+
+@media (max-height: 500px) {
+
+    .room-screen {
+        padding-top: 10px;
+        padding-bottom: 15px;
+    }
+
+    .room-header {
+        margin-bottom: 7px;
+    }
+
+    .room-game-title {
+        display: none;
+    }
+
+    .room-title {
+        font-size: 25px;
+    }
+
+    .player-section {
+        margin-bottom: 3px;
+    }
+
+    .room-info-section {
+        margin-bottom: 8px;
+    }
+
+    .table-card {
+        min-height: 95px;
+
+        margin-bottom: 6px;
+    }
+
+    .table-section > .section-label {
+        margin-bottom: 5px;
+    }
+
+    .table-card-header {
+        margin-bottom: 5px;
+    }
+
+    .table-description {
+        display: none;
+    }
+
+    .selection-section {
+        margin-bottom: 7px;
+    }
+
+    .action-button {
+        height: 48px;
+    }
+
+    .button-label {
+        font-size: 15px;
+    }
+
+    .button-subtitle {
+        display: none;
+    }
+
+}

@@ -1,0 +1,3783 @@
+/* ========================================
+   MONSTER WAR
+   BATTLE FIELD
+   20 × 20
+======================================== */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    background: #050505;
+    color: #ffffff;
+
+    font-family:
+        "Noto Sans JP",
+        "Yu Gothic",
+        "Hiragino Kaku Gothic ProN",
+        sans-serif;
+
+    overflow: hidden;
+}
+
+
+/* ========================================
+   BATTLE SCREEN
+======================================== */
+
+.battle-screen {
+    width: 100%;
+    height: 100dvh;
+
+    display: flex;
+    flex-direction: column;
+
+    background: #050505;
+}
+
+
+/* ========================================
+   HEADER
+======================================== */
+
+.battle-header {
+    height: 64px;
+
+    padding: 0 24px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    flex-shrink: 0;
+
+    border-bottom: 1px solid #333333;
+}
+
+.battle-game-title {
+    font-size: 18px;
+    font-weight: 700;
+
+    letter-spacing: 0.16em;
+}
+
+.battle-title {
+    font-size: 12px;
+
+    letter-spacing: 0.2em;
+
+    color: #aaaaaa;
+}
+
+
+/* ========================================
+   BATTLE LAYOUT
+======================================== */
+
+.battle-layout {
+    position: relative;
+
+    width: 100%;
+    flex: 1;
+
+    min-height: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 12px 20px;
+}
+
+
+/* ========================================
+   FIELD AREA
+   画面の完全中央
+   可能な限り大きくする
+======================================== */
+
+.field-area {
+    width:
+        min(
+            82vh,
+            calc(100vw - 560px),
+            820px
+        );
+
+    height:
+        min(
+            82vh,
+            calc(100vw - 560px),
+            820px
+        );
+
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    transform:
+        translate(-50%, -50%);
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* ========================================
+   PLAYER STATUS
+======================================== */
+
+.player-status {
+    position: absolute;
+
+    top: 50%;
+
+    width: 240px;
+
+    height:
+        min(82vh, 680px);
+
+    transform:
+        translateY(-50%);
+
+    display: flex;
+    flex-direction: column;
+
+    min-width: 0;
+    min-height: 0;
+
+    background: #101010;
+
+    border: 1px solid #333333;
+
+    overflow: hidden;
+
+    box-shadow:
+        0 15px 40px
+        rgba(0, 0, 0, 0.45);
+}
+
+
+/* ========================================
+   PLAYER 1
+======================================== */
+
+.player-status-1 {
+
+    right:
+        calc(
+            50% +
+            min(
+                41vh,
+                calc((100vw - 560px) / 2),
+                410px
+            ) +
+            18px
+        );
+
+    border-color: #263f66;
+}
+
+
+/* ========================================
+   PLAYER 2
+======================================== */
+
+.player-status-2 {
+
+    left:
+        calc(
+            50% +
+            min(
+                41vh,
+                calc((100vw - 560px) / 2),
+                410px
+            ) +
+            18px
+        );
+
+    border-color: #662626;
+}
+
+
+/* ========================================
+   PLAYER HEADER
+======================================== */
+
+.player-status-header {
+
+    height: 44px;
+
+    flex-shrink: 0;
+
+    display: flex;
+
+    align-items: center;
+
+    padding: 0 14px;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.15em;
+
+    border-bottom:
+        1px solid #333333;
+}
+
+
+/* PLAYER 1 */
+
+.player-status-1
+.player-status-header {
+
+    color: #6fa8ff;
+
+    background:
+        linear-gradient(
+            90deg,
+            rgba(59, 130, 246, 0.15),
+            transparent
+        );
+
+    border-bottom-color: #263f66;
+}
+
+
+/* PLAYER 2 */
+
+.player-status-2
+.player-status-header {
+
+    justify-content: flex-end;
+
+    color: #ff7070;
+
+    background:
+        linear-gradient(
+            270deg,
+            rgba(239, 68, 68, 0.15),
+            transparent
+        );
+
+    border-bottom-color: #662626;
+}
+
+
+/* ========================================
+   CHARACTER LIST
+======================================== */
+
+.character-status-list {
+
+    flex: 1;
+
+    min-height: 0;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 7px;
+
+    padding: 8px;
+
+    overflow: hidden;
+}
+
+
+.character-status-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.character-status-list::-webkit-scrollbar-track {
+    background: #0a0a0a;
+}
+
+.character-status-list::-webkit-scrollbar-thumb {
+    background: #444444;
+}
+
+
+/* ========================================
+   CHARACTER CARD
+======================================== */
+
+.character-status-card {
+
+    width: 100%;
+
+    min-height: 86px;
+
+    padding: 8px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 6px;
+
+    background: #171717;
+
+    border: 1px solid #303030;
+
+    cursor: pointer;
+
+    user-select: none;
+
+    transition:
+        background 0.12s ease,
+        border-color 0.12s ease,
+        opacity 0.12s ease;
+}
+
+
+.character-status-card:hover {
+    background: #202020;
+}
+
+
+/* PLAYER COLORS */
+
+.character-status-card.player-1 {
+    border-left:
+        3px solid #3b82f6;
+}
+
+.character-status-card.player-2 {
+    border-right:
+        3px solid #ef4444;
+}
+
+
+/* ========================================
+   SELECTED CARD
+======================================== */
+
+.character-status-card.player-1.selected {
+
+    background: #18263b;
+
+    border-color: #3b82f6;
+
+    box-shadow:
+        inset 0 0 0 1px #3b82f6,
+        0 0 12px
+        rgba(59, 130, 246, 0.25);
+}
+
+
+.character-status-card.player-2.selected {
+
+    background: #3b1b1b;
+
+    border-color: #ef4444;
+
+    box-shadow:
+        inset 0 0 0 1px #ef4444,
+        0 0 12px
+        rgba(239, 68, 68, 0.25);
+}
+
+
+/* ========================================
+   MOVED
+======================================== */
+
+.character-status-card.moved {
+    opacity: 0.45;
+}
+
+
+/* ========================================
+   DEFEATED
+======================================== */
+
+.character-status-card.defeated {
+
+    opacity: 0.3;
+
+    filter: grayscale(1);
+
+    cursor: default;
+}
+
+
+/* ========================================
+   CARD MAIN
+======================================== */
+
+.status-card-main {
+
+    width: 100%;
+
+    min-width: 0;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 9px;
+}
+
+
+/* ========================================
+   CHARACTER IMAGE
+======================================== */
+
+.status-character-image {
+
+    width: 52px;
+    height: 52px;
+
+    flex-shrink: 0;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    overflow: hidden;
+
+    background: #0a0a0a;
+
+    border: 1px solid #444444;
+}
+
+
+.player-status-1
+.status-character-image {
+
+    border-color: #315c9c;
+}
+
+
+.player-status-2
+.status-character-image {
+
+    border-color: #9c3131;
+}
+
+
+.status-character-image img {
+
+    width: 100%;
+    height: 100%;
+
+    object-fit: contain;
+
+    display: block;
+}
+
+
+/* ========================================
+   CHARACTER INFO
+======================================== */
+
+.status-character-info {
+
+    flex: 1;
+
+    min-width: 0;
+}
+
+
+/* ========================================
+   NAME
+======================================== */
+
+.status-character-name {
+
+    width: 100%;
+
+    margin-bottom: 7px;
+
+    overflow: hidden;
+
+    white-space: nowrap;
+
+    text-overflow: ellipsis;
+
+    font-size: 12px;
+
+    font-weight: 700;
+}
+
+
+/* ========================================
+   HP ROW
+======================================== */
+
+.status-hp-row {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 5px;
+
+    margin-bottom: 3px;
+
+    font-size: 9px;
+
+    color: #999999;
+}
+
+
+.status-hp-row span:last-child {
+    color: #ffffff;
+}
+
+
+/* ========================================
+   HP BAR
+======================================== */
+
+.status-hp-bar {
+
+    width: 100%;
+
+    height: 5px;
+
+    overflow: hidden;
+
+    background: #292929;
+}
+
+
+.status-hp-fill {
+
+    height: 100%;
+
+    background: #dddddd;
+
+    transition:
+        width 0.2s ease;
+}
+
+
+.player-status-1
+.status-hp-fill {
+    background: #3b82f6;
+}
+
+
+.player-status-2
+.status-hp-fill {
+    background: #ef4444;
+}
+
+
+/* ========================================
+   STATS
+======================================== */
+
+.status-stats {
+
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 4px;
+
+    padding-top: 5px;
+
+    border-top:
+        1px solid #2b2b2b;
+
+    font-size: 8px;
+
+    color: #777777;
+}
+
+
+.status-stats span {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 3px;
+}
+
+
+.status-stats strong {
+
+    color: #dddddd;
+
+    font-weight: 700;
+}
+
+
+/* ========================================
+   BATTLE FIELD WRAPPER
+======================================== */
+
+.battle-field-wrapper {
+
+    width: 100%;
+    height: 100%;
+
+    position: relative;
+
+    background: #111111;
+
+    border: 2px solid #777777;
+
+    box-shadow:
+        0 0 0 1px #111111,
+        0 20px 50px
+        rgba(0, 0, 0, 0.65);
+}
+
+
+/* ========================================
+   BATTLE FIELD
+======================================== */
+
+.battle-field {
+
+    width: 100%;
+    height: 100%;
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(20, minmax(0, 1fr));
+
+    grid-template-rows:
+        repeat(20, minmax(0, 1fr));
+}
+
+
+/* ========================================
+   BOARD CELL
+======================================== */
+
+.board-cell {
+
+    min-width: 0;
+    min-height: 0;
+
+    position: relative;
+
+    background: #151515;
+
+    border-right:
+        1px solid #292929;
+
+    border-bottom:
+        1px solid #292929;
+
+    cursor: pointer;
+}
+
+
+/* ========================================
+   CHECKER BOARD
+======================================== */
+
+.board-cell:nth-child(40n + 1),
+.board-cell:nth-child(40n + 3),
+.board-cell:nth-child(40n + 5),
+.board-cell:nth-child(40n + 7),
+.board-cell:nth-child(40n + 9),
+.board-cell:nth-child(40n + 11),
+.board-cell:nth-child(40n + 13),
+.board-cell:nth-child(40n + 15),
+.board-cell:nth-child(40n + 17),
+.board-cell:nth-child(40n + 19),
+.board-cell:nth-child(40n + 21),
+.board-cell:nth-child(40n + 23),
+.board-cell:nth-child(40n + 25),
+.board-cell:nth-child(40n + 27),
+.board-cell:nth-child(40n + 29),
+.board-cell:nth-child(40n + 31),
+.board-cell:nth-child(40n + 33),
+.board-cell:nth-child(40n + 35),
+.board-cell:nth-child(40n + 37),
+.board-cell:nth-child(40n + 39) {
+
+    background: #181818;
+}
+
+
+/* ========================================
+   SELECTED CELL
+======================================== */
+
+.board-cell.selected {
+
+    background: #252525;
+
+    box-shadow:
+        inset 0 0 0 2px #ffffff;
+}
+
+
+/* ========================================
+   MOVABLE CELL
+======================================== */
+
+.board-cell.movable {
+
+    background: #202020;
+
+    box-shadow:
+        inset 0 0 0 1px
+        rgba(255, 255, 255, 0.35);
+
+    cursor: pointer;
+}
+
+
+.board-cell.movable::after {
+
+    content: "";
+
+    position: absolute;
+
+    top: 50%;
+    left: 50%;
+
+    width: 25%;
+    height: 25%;
+
+    transform:
+        translate(-50%, -50%);
+
+    border-radius: 50%;
+
+    background:
+        rgba(255, 255, 255, 0.22);
+
+    pointer-events: none;
+}
+
+
+/* ========================================
+   FIELD LABEL
+======================================== */
+
+.field-area::after {
+
+    content: "20 × 20";
+
+    position: absolute;
+
+    right: 10px;
+    bottom: 10px;
+
+    padding: 3px 6px;
+
+    background:
+        rgba(0, 0, 0, 0.72);
+
+    color: #777777;
+
+    font-size: 9px;
+
+    letter-spacing: 0.12em;
+
+    pointer-events: none;
+}
+
+
+/* ========================================
+   BATTLE CONTROL PANEL
+======================================== */
+
+.battle-control-panel {
+
+    position: fixed;
+
+    left: 50%;
+    bottom: 14px;
+
+    transform:
+        translateX(-50%);
+
+    width:
+        min(520px, calc(100vw - 40px));
+
+    min-height: 48px;
+
+    padding: 8px 10px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    background:
+        rgba(16, 16, 16, 0.96);
+
+    border: 1px solid #333333;
+
+    box-shadow:
+        0 10px 30px
+        rgba(0, 0, 0, 0.55);
+
+    z-index: 20;
+}
+
+
+/* ========================================
+   TURN INFO
+======================================== */
+
+.turn-info {
+
+    min-width: 105px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 2px;
+
+    padding-right: 12px;
+
+    border-right:
+        1px solid #333333;
+
+    font-size: 9px;
+
+    letter-spacing: 0.08em;
+}
+
+
+.turn-info span {
+    color: #777777;
+}
+
+
+.turn-info strong {
+    font-size: 11px;
+}
+
+
+/* ========================================
+   SELECTED INFO
+======================================== */
+
+.selected-info {
+
+    flex: 1;
+
+    min-width: 0;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    font-size: 10px;
+}
+
+
+.selected-info span:first-child {
+
+    max-width: 130px;
+
+    overflow: hidden;
+
+    white-space: nowrap;
+
+    text-overflow: ellipsis;
+
+    font-size: 12px;
+
+    font-weight: 700;
+}
+
+
+.selected-info span:last-child {
+    color: #888888;
+}
+
+
+/* ========================================
+   END TURN
+======================================== */
+
+#end-turn-button {
+
+    flex-shrink: 0;
+
+    width: 100px;
+    height: 34px;
+
+    border:
+        1px solid #555555;
+
+    background: #202020;
+
+    color: #ffffff;
+
+    font-family: inherit;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+
+    cursor: pointer;
+
+    transition:
+        background 0.15s,
+        border-color 0.15s;
+}
+
+
+#end-turn-button:hover {
+
+    background: #2c2c2c;
+
+    border-color: #888888;
+}
+
+
+#end-turn-button:active {
+    background: #151515;
+}
+
+
+/* ========================================
+   KILL CUT-IN
+======================================== */
+
+.kill-cut-in {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    pointer-events: none;
+    overflow: hidden;
+
+    background:
+        rgba(0, 0, 0, 0.78);
+
+    opacity: 0;
+    animation:
+        kill-cut-in-show 0.14s ease-out forwards;
+}
+
+.kill-cut-in-content {
+    width: min(900px, 88vw);
+    min-height: 210px;
+
+    display: flex;
+    align-items: center;
+
+    padding: 18px 42px;
+
+    background:
+        linear-gradient(
+            100deg,
+            rgba(10, 10, 10, 0.98),
+            rgba(28, 28, 28, 0.98)
+        );
+
+    border-top:
+        3px solid #ffffff;
+
+    border-bottom:
+        3px solid #ffffff;
+
+    box-shadow:
+        0 0 45px
+        rgba(255, 255, 255, 0.18);
+
+    transform:
+        skewX(-8deg)
+        translateX(-40px);
+
+    animation:
+        kill-cut-in-slide 0.22s
+        cubic-bezier(.2,.8,.2,1)
+        forwards;
+}
+
+.kill-cut-in-character {
+    width: 190px;
+    height: 190px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    transform: skewX(8deg);
+
+    overflow: hidden;
+}
+
+.kill-cut-in-character img {
+    width: 100%;
+    height: 100%;
+
+    object-fit: contain;
+    display: block;
+
+    filter:
+        drop-shadow(
+            0 0 18px
+            rgba(255, 255, 255, 0.28)
+        );
+}
+
+.kill-cut-in-text {
+    display: flex;
+    flex-direction: column;
+
+    justify-content: center;
+
+    margin-left: 28px;
+
+    transform: skewX(8deg);
+
+    color: #ffffff;
+}
+
+.kill-cut-in-label {
+    font-size: 12px;
+    font-weight: 700;
+
+    letter-spacing: 0.28em;
+
+    color: #999999;
+}
+
+.kill-cut-in-text strong {
+    margin-top: 4px;
+
+    font-size: clamp(28px, 5vw, 58px);
+    line-height: 1;
+
+    letter-spacing: 0.08em;
+}
+
+.kill-cut-in-kill {
+    margin-top: 10px;
+
+    font-size: clamp(24px, 4vw, 46px);
+    font-weight: 900;
+
+    font-style: italic;
+    letter-spacing: 0.12em;
+
+    text-shadow:
+        3px 3px 0 #000000;
+}
+
+.kill-cut-in.player-1 .kill-cut-in-content {
+    border-color: #3b82f6;
+}
+
+.kill-cut-in.player-1 .kill-cut-in-kill {
+    color: #6fa8ff;
+}
+
+.kill-cut-in.player-2 .kill-cut-in-content {
+    border-color: #ef4444;
+}
+
+.kill-cut-in.player-2 .kill-cut-in-kill {
+    color: #ff7070;
+}
+
+.kill-cut-in-flash {
+    position: absolute;
+    inset: 0;
+
+    background: #ffffff;
+
+    opacity: 0;
+
+    animation:
+        kill-cut-in-flash 0.16s
+        ease-out forwards;
+}
+
+.kill-cut-in.is-hidden {
+    animation:
+        kill-cut-in-hide 0.18s ease-in forwards;
+}
+
+.kill-cut-in.is-hidden .kill-cut-in-content {
+    animation:
+        kill-cut-in-content-hide 0.18s
+        ease-in forwards;
+}
+
+@keyframes kill-cut-in-show {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes kill-cut-in-slide {
+    from {
+        opacity: 0;
+        transform:
+            skewX(-8deg)
+            translateX(-80px)
+            scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform:
+            skewX(-8deg)
+            translateX(0)
+            scale(1);
+    }
+}
+
+@keyframes kill-cut-in-flash {
+    0% {
+        opacity: 0.8;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes kill-cut-in-hide {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes kill-cut-in-content-hide {
+    from {
+        opacity: 1;
+        transform:
+            skewX(-8deg)
+            translateX(0)
+            scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform:
+            skewX(-8deg)
+            translateX(80px)
+            scale(1.02);
+    }
+}
+
+@media (max-width: 600px) {
+    .kill-cut-in-content {
+        min-height: 150px;
+        padding: 12px 20px;
+    }
+
+    .kill-cut-in-character {
+        width: 125px;
+        height: 125px;
+    }
+
+    .kill-cut-in-text {
+        margin-left: 15px;
+    }
+}
+
+
+/* ========================================
+   RESPONSIVE
+======================================== */
+
+@media (max-width: 1250px) {
+
+    .field-area {
+
+        width:
+            min(
+                78vh,
+                calc(100vw - 460px),
+                700px
+            );
+
+        height:
+            min(
+                78vh,
+                calc(100vw - 460px),
+                700px
+            );
+    }
+
+
+    .player-status {
+
+        width: 190px;
+
+        height:
+            min(78vh, 580px);
+    }
+
+
+    .player-status-1 {
+
+        right:
+            calc(
+                50% +
+                min(
+                    39vh,
+                    calc((100vw - 460px) / 2),
+                    350px
+                ) +
+                12px
+            );
+    }
+
+
+    .player-status-2 {
+
+        left:
+            calc(
+                50% +
+                min(
+                    39vh,
+                    calc((100vw - 460px) / 2),
+                    350px
+                ) +
+                12px
+            );
+    }
+
+
+    .character-status-card {
+
+        min-height: 78px;
+
+        padding: 6px;
+    }
+
+
+    .status-character-image {
+
+        width: 44px;
+        height: 44px;
+    }
+
+
+    .status-character-name {
+        font-size: 11px;
+    }
+
+
+    .status-stats {
+        font-size: 7px;
+    }
+
+}
+
+
+/* ========================================
+   SHORT SCREEN
+======================================== */
+
+@media (max-height: 700px) {
+
+    .battle-header {
+        height: 50px;
+    }
+
+
+    .field-area {
+
+        width:
+            min(
+                72vh,
+                calc(100vw - 460px),
+                650px
+            );
+
+        height:
+            min(
+                72vh,
+                calc(100vw - 460px),
+                650px
+            );
+    }
+
+
+    .player-status {
+
+        height:
+            min(72vh, 500px);
+    }
+
+
+    .player-status-header {
+        height: 36px;
+    }
+
+
+    .character-status-list {
+
+        gap: 4px;
+
+        padding: 5px;
+    }
+
+
+    .character-status-card {
+
+        min-height: 68px;
+
+        padding: 5px;
+
+        gap: 4px;
+    }
+
+
+    .status-character-image {
+
+        width: 38px;
+        height: 38px;
+    }
+
+
+    .status-character-name {
+
+        margin-bottom: 4px;
+
+        font-size: 10px;
+    }
+
+
+    .status-hp-row {
+        font-size: 8px;
+    }
+
+
+    .status-stats {
+
+        padding-top: 3px;
+
+        font-size: 6px;
+    }
+
+
+    .battle-control-panel {
+
+        bottom: 8px;
+
+        min-height: 42px;
+
+        padding: 6px 8px;
+    }
+
+
+    #end-turn-button {
+        height: 30px;
+    }
+
+}
+
+
+/* ========================================
+   MOBILE
+======================================== */
+
+@media (max-width: 850px) {
+
+    body {
+        overflow: auto;
+    }
+
+
+    .battle-screen {
+
+        height: auto;
+
+        min-height: 100dvh;
+    }
+
+
+    .battle-layout {
+
+        position: relative;
+
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        padding: 10px;
+
+        gap: 10px;
+    }
+
+
+    .field-area {
+
+        position: relative;
+
+        left: auto;
+        top: auto;
+
+        transform: none;
+
+        order: 1;
+
+        width:
+            min(92vw, 70vh);
+
+        height:
+            min(92vw, 70vh);
+    }
+
+
+    .player-status {
+
+        position: relative;
+
+        top: auto;
+        left: auto;
+        right: auto;
+
+        width:
+            min(92vw, 500px);
+
+        height: auto;
+
+        transform: none;
+    }
+
+
+    .player-status-1 {
+        order: 2;
+    }
+
+
+    .player-status-2 {
+        order: 3;
+    }
+
+
+    .character-status-list {
+
+        display: grid;
+
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+
+    .battle-control-panel {
+
+        position: sticky;
+
+        left: auto;
+        bottom: auto;
+
+        transform: none;
+
+        width:
+            min(92vw, 500px);
+
+        margin:
+            0 auto 10px;
+    }
+
+}
+
+
+/* ========================================
+   SMALL MOBILE
+======================================== */
+
+/* ========================================
+   ACTION BUTTONS
+   移動完了後の行動選択
+======================================== */
+
+.action-buttons {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.action-buttons button {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 36px;
+    padding: 0 12px;
+
+    border: 1px solid #3d3d3d;
+    background: #181818;
+    color: #d8d8d8;
+
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: normal;
+    cursor: pointer;
+
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease,
+        transform 0.1s ease;
+}
+
+.action-buttons button:hover {
+    background: #242424;
+    border-color: #666666;
+    color: #ffffff;
+}
+
+.action-buttons button:active {
+    background: #111111;
+    transform: translateY(1px);
+}
+
+
+/* ========================================
+   ACTION BUTTON INDIVIDUAL DESIGN
+======================================== */
+
+#skill-action-button {
+    border-color: #31527d;
+}
+
+#skill-action-button:hover {
+    background: #1b2a3d;
+    border-color: #527fb8;
+}
+
+#wait-action-button {
+    border-color: #444444;
+}
+
+#wait-action-button:hover {
+    background: #292929;
+    border-color: #666666;
+}
+
+#bluff-action-button {
+    border-color: #625936;
+    background: #1d1b16;
+}
+
+#bluff-action-button:hover {
+    background: #2b281d;
+    border-color: #91804b;
+}
+
+
+/* ========================================
+   SKILL SELECT
+======================================== */
+
+.skill-buttons {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.skill-button {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 80px;
+    height: 34px;
+    padding: 0 10px;
+
+    border: 1px solid #3d3d3d;
+    background: #181818;
+    color: #d8d8d8;
+
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: clip;
+    line-height: 1.15;
+    text-align: center;
+
+    box-sizing: border-box;
+}
+
+.skill-button:disabled {
+    opacity: 0.35;
+    color: #777777;
+    background: #101010;
+    border-color: #292929;
+    cursor: not-allowed;
+}
+
+.skill-button:disabled:hover {
+    background: #101010;
+    border-color: #292929;
+    color: #777777;
+}
+
+.skill-button:hover {
+
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 80px;
+    height: 34px;
+    padding: 0 10px;
+
+    background: #292929;
+    border-color: #666666;
+    color: #ffffff;
+
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: clip;
+    line-height: 1.15;
+    text-align: center;
+
+    box-sizing: border-box;
+}
+
+
+/* ========================================
+   SKILL CANCEL
+======================================== */
+
+#skill-cancel-button {
+    flex-shrink: 0;
+    width: 70px;
+    height: 34px;
+
+    border: 1px solid #3d3d3d;
+    background: #181818;
+    color: #d8d8d8;
+
+    font-family: inherit;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+#skill-cancel-button:hover {
+    background: #292929;
+    border-color: #666666;
+    color: #ffffff;
+}
+
+
+/* ========================================
+   STATUS SKILLS
+======================================== */
+
+.status-skills {
+    width: 100%;
+    min-width: 0;
+    margin-top: 1px;
+    padding-top: 5px;
+    border-top: 1px solid #2b2b2b;
+}
+
+.status-skills-title {
+    margin-bottom: 4px;
+    color: #777777;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+}
+
+.status-skills-list {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+}
+
+.status-skill {
+    min-width: 0;
+    height: 21px;
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3px;
+    overflow: hidden;
+    background: #101010;
+    border: 1px solid #2d2d2d;
+    box-sizing: border-box;
+}
+
+.status-skill-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: #d8d8d8;
+    font-size: 8px;
+    font-weight: 700;
+}
+
+.status-skill-power {
+    flex-shrink: 0;
+    color: #777777;
+    font-size: 7px;
+    white-space: nowrap;
+}
+
+.status-skill-empty {
+    grid-column: 1 / -1;
+    height: 21px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555555;
+    font-size: 8px;
+    border: 1px solid #242424;
+    background: #101010;
+}
+
+/* ========================================
+   BLUFF STATUS
+======================================== */
+
+
+.character-status-card.bluff {
+    border-color: #625936;
+}
+
+.status-bluff {
+    width: 100%;
+    height: 21px;
+    padding: 2px 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid #4d4326;
+    background: #15130f;
+    color: #c1ab5e;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-align: center;
+}
+
+
+/* ========================================
+   NO SKILL
+======================================== */
+
+.no-skill-message {
+    flex: 1;
+    color: #777777;
+    font-size: 10px;
+    text-align: center;
+}
+
+
+/* ========================================
+   BLUFF SELECT
+======================================== */
+
+.bluff-selection {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.bluff-select-button {
+    min-width: 0;
+    min-height: 52px;
+    padding: 5px 7px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 1px solid #4d4326;
+    background: #181711;
+    color: #d8d8d8;
+    font-family: inherit;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.bluff-select-button strong {
+    color: #c1ab5e;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.bluff-select-button span {
+    color: #88806a;
+    font-size: 8px;
+}
+
+.bluff-select-button small {
+    max-width: 100%;
+    overflow: hidden;
+    color: #66635a;
+    font-size: 7px;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.bluff-select-button:hover:not(:disabled) {
+    background: #292519;
+    border-color: #91804b;
+}
+
+.bluff-select-button:active:not(:disabled) {
+    background: #12110d;
+}
+
+.bluff-select-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+#bluff-cancel-button {
+    flex-shrink: 0;
+    width: 58px;
+    height: 34px;
+    border: 1px solid #3d3d3d;
+    background: #181818;
+    color: #d8d8d8;
+    font-family: inherit;
+    font-size: 9px;
+    cursor: pointer;
+}
+
+#bluff-cancel-button:hover {
+    background: #292929;
+    border-color: #666666;
+    color: #ffffff;
+}
+
+/* ========================================
+   ACTION PANEL
+======================================== */
+
+.battle-control-panel:has(.action-buttons) {
+    width: min(700px, calc(100vw - 40px));
+    min-height: 58px;
+    padding: 9px 12px;
+}
+
+.battle-control-panel:has(.skill-buttons) {
+    width: min(700px, calc(100vw - 40px));
+}
+
+
+/* ========================================
+   ACTION PANEL RESPONSIVE
+======================================== */
+
+@media (max-height: 700px) {
+
+    .battle-control-panel:has(.action-buttons) {
+        min-height: 50px;
+        padding: 6px 8px;
+    }
+
+    .action-buttons button {
+        height: 32px;
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 700px) {
+
+    .battle-control-panel:has(.action-buttons) {
+        width: min(94vw, 560px);
+    }
+
+    .action-buttons {
+        gap: 5px;
+    }
+
+    .action-buttons button {
+        height: 34px;
+        padding: 0 7px;
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 500px) {
+
+    .battle-control-panel:has(.action-buttons) {
+        width: 94vw;
+        padding: 7px;
+    }
+
+    .battle-control-panel:has(.action-buttons) .turn-info {
+        min-width: 78px;
+        padding-right: 7px;
+    }
+
+    .battle-control-panel:has(.action-buttons) .selected-info {
+        display: none;
+    }
+
+    .action-buttons {
+        width: 100%;
+        gap: 4px;
+    }
+
+    .action-buttons button {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 36px;
+        padding: 0 3px;
+        font-size: 8px;
+        line-height: 1.1;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-all;
+        box-sizing: border-box;
+    }
+
+    #skill-cancel-button {
+        width: 100%;
+    }
+}
+
+
+@media (max-width: 500px) {
+
+    .battle-header {
+
+        height: 48px;
+
+        padding: 0 12px;
+    }
+
+
+    .battle-game-title {
+        font-size: 13px;
+    }
+
+
+    .battle-title {
+        font-size: 8px;
+    }
+
+
+    .battle-layout {
+        padding: 8px;
+    }
+
+
+    .field-area {
+
+        width: 94vw;
+
+        height: 94vw;
+    }
+
+
+    .character-status-list {
+
+        grid-template-columns: 1fr;
+    }
+
+
+    .character-status-card {
+        min-height: 74px;
+    }
+
+
+    .battle-control-panel {
+
+        flex-wrap: wrap;
+    }
+
+
+    .turn-info {
+        min-width: 90px;
+    }
+
+
+    .selected-info {
+        min-width: 120px;
+    }
+
+
+    #end-turn-button {
+        width: 90px;
+    }
+
+
+}
+/* ========================================
+   SKILL TARGET
+======================================== */
+
+.board-cell.skill-target {
+    position: relative;
+    cursor: crosshair;
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 210, 70, 0.95),
+        inset 0 0 14px rgba(255, 180, 40, 0.28);
+    background:
+        rgba(255, 200, 60, 0.14);
+    z-index: 3;
+}
+
+
+/*
+ * 技対象マスのホバー
+ */
+
+.board-cell.skill-target:hover {
+    background:
+        rgba(255, 210, 70, 0.32);
+
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 235, 130, 1),
+        inset 0 0 18px rgba(255, 190, 50, 0.5);
+
+    transform: scale(0.96);
+}
+
+
+/*
+ * 技対象マスの点滅
+ */
+
+@keyframes skillTargetPulse {
+
+    0% {
+        box-shadow:
+            inset 0 0 0 2px rgba(255, 210, 70, 0.55),
+            inset 0 0 8px rgba(255, 180, 40, 0.12);
+    }
+
+    50% {
+        box-shadow:
+            inset 0 0 0 2px rgba(255, 235, 130, 1),
+            inset 0 0 18px rgba(255, 190, 50, 0.45);
+    }
+
+    100% {
+        box-shadow:
+            inset 0 0 0 2px rgba(255, 210, 70, 0.55),
+            inset 0 0 8px rgba(255, 180, 40, 0.12);
+    }
+
+}
+
+
+.board-cell.skill-target {
+    animation:
+        skillTargetPulse
+        0.9s
+        ease-in-out
+        infinite;
+}
+
+
+/*
+ * 技対象選択中は
+ * movableの表示より優先
+ */
+
+.board-cell.skill-target.movable {
+    background:
+        rgba(255, 200, 60, 0.14);
+
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 210, 70, 0.95),
+        inset 0 0 14px rgba(255, 180, 40, 0.28);
+}
+
+
+/*
+ * 選択中セルと技対象セルが
+ * 重なった場合
+ */
+
+.board-cell.skill-target.selected {
+    box-shadow:
+        inset 0 0 0 3px rgba(255, 235, 130, 1),
+        inset 0 0 20px rgba(255, 190, 50, 0.55);
+}
+
+
+/* ========================================
+   SKILL TARGET PANEL
+======================================== */
+
+#skill-target-cancel-button {
+    flex-shrink: 0;
+
+    width: 100%;
+    height: 34px;
+
+    border:
+        1px solid #5a4a25;
+
+    background:
+        #211e16;
+
+    color:
+        #d8c27a;
+
+    font-family:
+        inherit;
+
+    font-size:
+        10px;
+
+    font-weight:
+        700;
+
+    cursor:
+        pointer;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+
+
+#skill-target-cancel-button:hover {
+    background:
+        #302b1d;
+
+    border-color:
+        #8c763c;
+
+    color:
+        #ffffff;
+}
+
+
+/* ========================================
+   SKILL TARGET MODE
+======================================== */
+
+.battle-control-panel:has(#skill-target-cancel-button) {
+    width:
+        min(700px, calc(100vw - 40px));
+
+    min-height:
+        58px;
+
+    padding:
+        9px 12px;
+}
+
+
+/* ========================================
+   SKILL TARGET RESPONSIVE
+======================================== */
+
+@media (max-height: 700px) {
+
+    .battle-control-panel:has(#skill-target-cancel-button) {
+        min-height:
+            50px;
+
+        padding:
+            6px 8px;
+    }
+
+}
+
+
+@media (max-width: 700px) {
+
+    .battle-control-panel:has(#skill-target-cancel-button) {
+        width:
+            min(94vw, 560px);
+    }
+
+}
+
+
+@media (max-width: 500px) {
+
+    .battle-control-panel:has(#skill-target-cancel-button) {
+        width:
+            94vw;
+
+        padding:
+            7px;
+    }
+
+}
+
+@media (max-width: 1250px) {
+    .status-skills {
+        padding-top: 3px;
+    }
+    .status-skills-title {
+        margin-bottom: 2px;
+        font-size: 7px;
+    }
+    .status-skill {
+        height: 18px;
+        padding: 1px 3px;
+    }
+    .status-skill-name {
+        font-size: 7px;
+    }
+    .status-skill-power {
+        font-size: 6px;
+    }
+    .status-skill-empty {
+        height: 18px;
+    }
+    .status-bluff {
+        height: 18px;
+        font-size: 7px;
+    }
+}
+
+@media (max-height: 700px) {
+    .status-skills {
+        padding-top: 2px;
+    }
+    .status-skills-title {
+        margin-bottom: 2px;
+        font-size: 6px;
+    }
+    .status-skills-list {
+        gap: 2px;
+    }
+    .status-skill {
+        height: 16px;
+        padding: 1px 2px;
+    }
+    .status-skill-name {
+        font-size: 6px;
+    }
+    .status-skill-power {
+        display: none;
+    }
+    .status-skill-empty,
+    .status-bluff {
+        height: 16px;
+    }
+    .bluff-select-button {
+        min-height: 46px;
+        padding: 4px;
+    }
+    .bluff-select-button strong {
+        font-size: 9px;
+    }
+    .bluff-select-button small {
+        display: none;
+    }
+}
+
+/* ========================================
+   PARTY CARD COMPACT OVERRIDE
+   技表示によるカード同士の重なり防止
+======================================== */
+
+.character-status-list {
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+    padding: 6px;
+    box-sizing: border-box;
+}
+
+.character-status-card {
+    min-height: 0;
+    height: 100%;
+    padding: 4px 5px;
+    gap: 3px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.status-card-main {
+    flex: 0 0 36px;
+    height: 36px;
+    gap: 6px;
+    overflow: hidden;
+}
+
+.status-character-image {
+    width: 36px;
+    height: 36px;
+}
+
+.status-character-name {
+    margin-bottom: 2px;
+    font-size: 9px;
+}
+
+.status-hp-row {
+    margin-bottom: 2px;
+    font-size: 7px;
+}
+
+.status-hp-bar {
+    height: 3px;
+}
+
+.status-stats {
+    flex: 0 0 12px;
+    height: 12px;
+    padding-top: 2px;
+    gap: 2px;
+    font-size: 6px;
+    box-sizing: border-box;
+}
+
+.status-skills {
+    flex: 0 0 28px;
+    height: 28px;
+    min-height: 0;
+    margin-top: 0;
+    padding-top: 2px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.status-skills-title {
+    height: 7px;
+    margin-bottom: 1px;
+    font-size: 6px;
+    line-height: 7px;
+}
+
+.status-skills-list {
+    height: 20px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 2px;
+    overflow: hidden;
+}
+
+.status-skill {
+    min-width: 0;
+    min-height: 0;
+    height: 9px;
+    padding: 1px 2px;
+    gap: 2px;
+    line-height: 7px;
+}
+
+.status-skill-name {
+    font-size: 6px;
+    line-height: 7px;
+}
+
+.status-skill-power {
+    font-size: 5px;
+    line-height: 7px;
+}
+
+.status-skill-empty {
+    height: 20px;
+    font-size: 6px;
+}
+
+.status-bluff {
+    flex: 0 0 16px;
+    height: 16px;
+    min-height: 16px;
+    padding: 1px 3px;
+    font-size: 6px;
+    letter-spacing: 0.08em;
+    box-sizing: border-box;
+}
+
+/* ========================================
+   BLUFF BUTTON DESIGN
+   行動ボタン・ブラフ選択ボタンを同系統に統一
+======================================== */
+
+#bluff-action-button {
+    border: 1px solid #806f38 !important;
+    background: #18160f !important;
+    color: #c8ae55 !important;
+    box-shadow: inset 0 0 0 1px rgba(128, 111, 56, 0.12);
+}
+
+#bluff-action-button:hover {
+    background: #292519 !important;
+    border-color: #b39a4f !important;
+    color: #e0c76d !important;
+}
+
+.bluff-selection {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.bluff-select-button {
+    min-width: 0;
+    min-height: 48px;
+    height: 48px;
+    padding: 4px 5px;
+    border: 1px solid #806f38 !important;
+    background: #18160f !important;
+    color: #d8d8d8 !important;
+    box-shadow: inset 0 0 0 1px rgba(128, 111, 56, 0.10);
+    overflow: hidden;
+}
+
+.bluff-select-button strong {
+    color: #c8ae55 !important;
+    font-size: 9px;
+    line-height: 10px;
+}
+
+.bluff-select-button span {
+    color: #9b8b5b !important;
+    font-size: 7px;
+    line-height: 8px;
+}
+
+.bluff-select-button small {
+    color: #77705e !important;
+    font-size: 6px;
+    line-height: 7px;
+}
+
+.bluff-select-button:hover:not(:disabled) {
+    background: #292519 !important;
+    border-color: #b39a4f !important;
+    color: #ffffff !important;
+}
+
+.bluff-select-button:active:not(:disabled) {
+    background: #12110d !important;
+}
+
+.bluff-select-button:disabled {
+    opacity: 0.3;
+    border-color: #403a2a !important;
+    background: #12110d !important;
+}
+
+#bluff-cancel-button {
+    border: 1px solid #4a4a4a !important;
+    background: #181818 !important;
+    color: #c8c8c8 !important;
+}
+
+#bluff-cancel-button:hover {
+    background: #292929 !important;
+    border-color: #777777 !important;
+    color: #ffffff !important;
+}
+
+/* ========================================
+   COMPACT / SHORT SCREEN
+======================================== */
+
+@media (max-width: 1250px) {
+    .character-status-list {
+        gap: 4px;
+        padding: 5px;
+    }
+
+    .character-status-card {
+        padding: 3px 4px;
+        gap: 2px;
+    }
+
+    .status-card-main {
+        flex-basis: 32px;
+        height: 32px;
+        gap: 5px;
+    }
+
+    .status-character-image {
+        width: 32px;
+        height: 32px;
+    }
+
+    .status-character-name {
+        font-size: 8px;
+    }
+
+    .status-hp-row {
+        font-size: 6px;
+    }
+
+    .status-stats {
+        font-size: 5px;
+    }
+
+    .status-skills {
+        flex-basis: 25px;
+        height: 25px;
+    }
+
+    .status-skills-list {
+        height: 18px;
+    }
+
+    .status-skill {
+        height: 8px;
+    }
+
+    .status-skill-name {
+        font-size: 5.5px;
+    }
+
+    .status-skill-power {
+        font-size: 4.5px;
+    }
+}
+
+@media (max-height: 700px) {
+    .character-status-list {
+        gap: 3px;
+        padding: 4px;
+    }
+
+    .character-status-card {
+        padding: 2px 3px;
+        gap: 2px;
+    }
+
+    .status-card-main {
+        flex-basis: 28px;
+        height: 28px;
+    }
+
+    .status-character-image {
+        width: 28px;
+        height: 28px;
+    }
+
+    .status-character-name {
+        font-size: 7px;
+    }
+
+    .status-hp-row {
+        font-size: 5.5px;
+    }
+
+    .status-stats {
+        height: 10px;
+        flex-basis: 10px;
+        padding-top: 1px;
+        font-size: 4.5px;
+    }
+
+    .status-skills {
+        flex-basis: 21px;
+        height: 21px;
+        padding-top: 1px;
+    }
+
+    .status-skills-title {
+        height: 6px;
+        margin-bottom: 1px;
+        font-size: 5px;
+        line-height: 6px;
+    }
+
+    .status-skills-list {
+        height: 14px;
+        gap: 1px;
+    }
+
+    .status-skill {
+        height: 6.5px;
+        padding: 0 1px;
+    }
+
+    .status-skill-name {
+        font-size: 4.5px;
+        line-height: 6px;
+    }
+
+    .status-skill-power {
+        display: none;
+    }
+
+    .status-bluff {
+        flex-basis: 13px;
+        height: 13px;
+        min-height: 13px;
+        font-size: 5px;
+    }
+
+    .bluff-select-button {
+        min-height: 42px;
+        height: 42px;
+    }
+}
+
+/* ========================================
+   FINAL FIX - STATUS CARD SKILL DISPLAY
+======================================== */
+
+/* 6キャラを縦6段に収めた際も、技欄まで必ず表示する */
+.character-status-list {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: repeat(6, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    padding: 6px !important;
+    overflow: hidden !important;
+}
+
+/* カード内の高さ配分を固定 */
+.character-status-card {
+    min-height: 0 !important;
+    height: 100% !important;
+    padding: 4px 5px !important;
+    gap: 2px !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* 上段 */
+.status-card-main {
+    flex: 0 0 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    overflow: hidden !important;
+}
+
+/* ATK / DEF / MOVE */
+.status-stats {
+    flex: 0 0 11px !important;
+    height: 11px !important;
+    min-height: 11px !important;
+    padding-top: 1px !important;
+    overflow: hidden !important;
+}
+
+/* 技欄 */
+.status-skills {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding-top: 1px !important;
+    overflow: hidden !important;
+}
+
+/* 「技」タイトル */
+.status-skills-title {
+    height: 8px !important;
+    min-height: 8px !important;
+    margin: 0 0 1px 0 !important;
+    font-size: 6px !important;
+    line-height: 8px !important;
+}
+
+/* 技一覧 */
+.status-skills-list {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1px !important;
+    overflow: hidden !important;
+}
+
+/* 技名 */
+.status-skill {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 1px 2px !important;
+    display: flex !important;
+    align-items: center !important;
+    overflow: hidden !important;
+    line-height: 1 !important;
+}
+
+.status-skill-name {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    font-size: 6px !important;
+    line-height: 1 !important;
+}
+
+.status-skill-power {
+    flex-shrink: 0 !important;
+    font-size: 5px !important;
+    line-height: 1 !important;
+}
+
+/* 画面高さ700px以下でも技欄を潰さない */
+@media (max-height: 700px) {
+    .character-status-card {
+        padding: 3px 4px !important;
+        gap: 2px !important;
+    }
+
+    .status-card-main {
+        flex-basis: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+    }
+
+    .status-character-image {
+        width: 32px !important;
+        height: 32px !important;
+    }
+
+    .status-stats {
+        flex-basis: 10px !important;
+        height: 10px !important;
+        min-height: 10px !important;
+    }
+
+    .status-skills {
+        flex: 1 1 auto !important;
+        height: auto !important;
+    }
+
+    .status-skills-title {
+        height: 7px !important;
+        min-height: 7px !important;
+        font-size: 6px !important;
+        line-height: 7px !important;
+    }
+
+    .status-skill-name {
+        font-size: 6px !important;
+    }
+
+    .status-skill-power {
+        display: none !important;
+    }
+}
+
+
+/* ========================================
+   FINAL FIX 2 - 技欄を確実に表示
+======================================== */
+
+.character-status-card {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+.status-card-main {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+}
+
+.status-stats {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+}
+
+/* 技欄 */
+.status-skills {
+    display: block !important;
+    flex: 0 0 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    margin: 0 !important;
+    padding-top: 1px !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+}
+
+/* 技タイトル */
+.status-skills-title {
+    display: block !important;
+    height: 8px !important;
+    min-height: 8px !important;
+    margin: 0 0 2px 0 !important;
+    font-size: 6px !important;
+    line-height: 8px !important;
+}
+
+/* 技4個を2×2で表示 */
+.status-skills-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, 9px) !important;
+    width: 100% !important;
+    height: 19px !important;
+    min-height: 19px !important;
+    max-height: 19px !important;
+    gap: 1px !important;
+    overflow: visible !important;
+}
+
+/* 個々の技 */
+.status-skill {
+    display: flex !important;
+    width: 100% !important;
+    height: 9px !important;
+    min-height: 9px !important;
+    max-height: 9px !important;
+    align-items: center !important;
+    overflow: hidden !important;
+    padding: 0 2px !important;
+    line-height: 9px !important;
+    box-sizing: border-box !important;
+}
+
+.status-skill-name {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    font-size: 6px !important;
+    line-height: 9px !important;
+}
+
+/* 短い画面でも技欄を消さない */
+@media (max-height: 700px) {
+    .status-skills {
+        flex: 0 0 25px !important;
+        height: 25px !important;
+        min-height: 25px !important;
+        max-height: 25px !important;
+    }
+
+    .status-skills-title {
+        height: 7px !important;
+        min-height: 7px !important;
+        margin-bottom: 1px !important;
+        font-size: 6px !important;
+        line-height: 7px !important;
+    }
+
+    .status-skills-list {
+        height: 16px !important;
+        min-height: 16px !important;
+        max-height: 16px !important;
+        grid-template-rows: repeat(2, 7.5px) !important;
+    }
+
+    .status-skill {
+        height: 7.5px !important;
+        min-height: 7.5px !important;
+        max-height: 7.5px !important;
+        line-height: 7.5px !important;
+    }
+
+    .status-skill-name {
+        font-size: 5.5px !important;
+        line-height: 7.5px !important;
+    }
+}
+/* ============================================================
+   MONSTER WAR - STATUS CARD SKILL DISPLAY FINAL
+   JS createStatusCard() の実DOM構造に合わせた最終調整
+   ============================================================ */
+
+/* ステータス欄そのもの */
+.player-status {
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+.character-status-list {
+    min-height: 0 !important;
+    overflow: hidden !important;
+
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: repeat(6, minmax(0, 1fr)) !important;
+
+    gap: 4px !important;
+    padding: 4px !important;
+    box-sizing: border-box !important;
+}
+
+/* ------------------------------------------------------------
+   1枚のキャラカード
+   ------------------------------------------------------------ */
+.character-status-card {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+
+    padding: 3px 4px !important;
+    gap: 2px !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+/* ------------------------------------------------------------
+   キャラ画像＋名前＋HP
+   技欄を確保するため、ここは固定高さ
+   ------------------------------------------------------------ */
+.character-status-card .status-card-main {
+    flex: 0 0 34px !important;
+    width: 100% !important;
+    height: 34px !important;
+    min-height: 34px !important;
+
+    display: flex !important;
+    align-items: center !important;
+
+    gap: 5px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+
+.character-status-card .status-character-image {
+    flex: 0 0 34px !important;
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+}
+
+.character-status-card .status-character-image img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    display: block !important;
+}
+
+.character-status-card .status-character-info {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+.character-status-card .status-character-name {
+    width: 100% !important;
+    margin: 0 0 2px 0 !important;
+
+    font-size: 8px !important;
+    line-height: 9px !important;
+
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.character-status-card .status-hp-row {
+    width: 100% !important;
+    margin: 0 0 2px 0 !important;
+
+    font-size: 6px !important;
+    line-height: 7px !important;
+
+    overflow: hidden !important;
+}
+
+.character-status-card .status-hp-bar {
+    width: 100% !important;
+    height: 4px !important;
+    min-height: 4px !important;
+    overflow: hidden !important;
+}
+
+/* ------------------------------------------------------------
+   ATK / DEF / MOVE
+   ------------------------------------------------------------ */
+.character-status-card .status-stats {
+    flex: 0 0 10px !important;
+    width: 100% !important;
+    height: 10px !important;
+    min-height: 10px !important;
+
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+
+    gap: 3px !important;
+    padding: 1px 0 0 0 !important;
+    margin: 0 !important;
+
+    font-size: 5px !important;
+    line-height: 8px !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+.character-status-card .status-stats span {
+    min-width: 0 !important;
+
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+
+    gap: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+}
+
+.character-status-card .status-stats strong {
+    flex-shrink: 0 !important;
+}
+
+/* ------------------------------------------------------------
+   ★ 技欄
+   固定領域を確保する。
+   flex: 0 0 auto なのでカード内で潰れない。
+   ------------------------------------------------------------ */
+.character-status-card .status-skills {
+    flex: 0 0 28px !important;
+
+    width: 100% !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+
+    display: block !important;
+
+    margin: 0 !important;
+    padding: 2px 0 0 0 !important;
+
+    border-top: 1px solid #2b2b2b !important;
+
+    box-sizing: border-box !important;
+    overflow: visible !important;
+}
+
+/* 「技」 */
+.character-status-card .status-skills-title {
+    display: block !important;
+
+    width: 100% !important;
+    height: 7px !important;
+    min-height: 7px !important;
+
+    margin: 0 0 1px 0 !important;
+    padding: 0 !important;
+
+    font-size: 5px !important;
+    line-height: 7px !important;
+
+    color: #777777 !important;
+    overflow: hidden !important;
+}
+
+/* ------------------------------------------------------------
+   技4個
+   ------------------------------------------------------------ */
+.character-status-card .status-skills-list {
+    display: grid !important;
+
+    width: 100% !important;
+    height: 16px !important;
+    min-height: 16px !important;
+    max-height: 16px !important;
+
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, 7.5px) !important;
+
+    gap: 1px !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    box-sizing: border-box !important;
+    overflow: visible !important;
+}
+
+/* 技1個 */
+.character-status-card .status-skill {
+    width: 100% !important;
+    height: 7.5px !important;
+    min-width: 0 !important;
+    min-height: 7.5px !important;
+    max-height: 7.5px !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+
+    padding: 0 2px !important;
+    margin: 0 !important;
+
+    gap: 2px !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+
+    background: #101010 !important;
+    border: 1px solid #2d2d2d !important;
+}
+
+/* 技名 */
+.character-status-card .status-skill-name {
+    flex: 1 1 auto !important;
+
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+
+    display: block !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    font-size: 5px !important;
+    line-height: 7px !important;
+
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+/* 威力 */
+.character-status-card .status-skill-power {
+    flex: 0 0 auto !important;
+
+    font-size: 4px !important;
+    line-height: 7px !important;
+
+    white-space: nowrap !important;
+    overflow: hidden !important;
+}
+
+/* 技なし */
+.character-status-card .status-skill-empty {
+    grid-column: 1 / -1 !important;
+
+    width: 100% !important;
+    height: 16px !important;
+    min-height: 16px !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    font-size: 5px !important;
+    line-height: 16px !important;
+
+    box-sizing: border-box !important;
+}
+
+/* ブラフ表示が付いた場合も技欄を圧迫しない */
+.character-status-card .status-bluff {
+    flex: 0 0 12px !important;
+
+    width: 100% !important;
+    height: 12px !important;
+    min-height: 12px !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    font-size: 5px !important;
+    line-height: 12px !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+/* ------------------------------------------------------------
+   画面が低い場合
+   6枚＋技欄を維持する
+   ------------------------------------------------------------ */
+@media (max-height: 700px) {
+
+    .character-status-list {
+        gap: 3px !important;
+        padding: 3px !important;
+    }
+
+    .character-status-card {
+        padding: 2px 3px !important;
+        gap: 1px !important;
+    }
+
+    .character-status-card .status-card-main {
+        flex-basis: 29px !important;
+        height: 29px !important;
+        min-height: 29px !important;
+    }
+
+    .character-status-card .status-character-image {
+        flex-basis: 29px !important;
+        width: 29px !important;
+        height: 29px !important;
+        min-width: 29px !important;
+        min-height: 29px !important;
+    }
+
+    .character-status-card .status-character-name {
+        font-size: 7px !important;
+        line-height: 8px !important;
+    }
+
+    .character-status-card .status-hp-row {
+        font-size: 5px !important;
+        line-height: 6px !important;
+    }
+
+    .character-status-card .status-hp-bar {
+        height: 3px !important;
+        min-height: 3px !important;
+    }
+
+    .character-status-card .status-stats {
+        flex-basis: 9px !important;
+        height: 9px !important;
+        min-height: 9px !important;
+        font-size: 4.5px !important;
+    }
+
+    .character-status-card .status-skills {
+        flex-basis: 23px !important;
+        height: 23px !important;
+        min-height: 23px !important;
+        max-height: 23px !important;
+        padding-top: 1px !important;
+    }
+
+    .character-status-card .status-skills-title {
+        height: 6px !important;
+        min-height: 6px !important;
+        line-height: 6px !important;
+        font-size: 4.5px !important;
+        margin-bottom: 1px !important;
+    }
+
+    .character-status-card .status-skills-list {
+        height: 15px !important;
+        min-height: 15px !important;
+        max-height: 15px !important;
+        grid-template-rows: repeat(2, 7px) !important;
+    }
+
+    .character-status-card .status-skill {
+        height: 7px !important;
+        min-height: 7px !important;
+        max-height: 7px !important;
+    }
+
+    .character-status-card .status-skill-name {
+        font-size: 4.5px !important;
+        line-height: 6px !important;
+    }
+
+    .character-status-card .status-skill-power {
+        display: none !important;
+    }
+
+    .character-status-card .status-bluff {
+        height: 10px !important;
+        min-height: 10px !important;
+        flex-basis: 10px !important;
+        font-size: 4.5px !important;
+        line-height: 10px !important;
+    }
+}
+/* ============================================================
+   MONSTER WAR - SKILL 4 DISPLAY FIX
+   技が2個しか見えない問題への最終上書き
+   ============================================================ */
+
+.character-status-card .status-skills {
+    flex: 0 0 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+    display: block !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+}
+
+.character-status-card .status-skills-title {
+    display: block !important;
+    height: 7px !important;
+    min-height: 7px !important;
+    margin: 0 0 1px 0 !important;
+    padding: 0 !important;
+    font-size: 5px !important;
+    line-height: 7px !important;
+}
+
+.character-status-card .status-skills-list {
+    display: grid !important;
+
+    /* ★ 4技を1行で表示 */
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-rows: 14px !important;
+
+    width: 100% !important;
+    height: 14px !important;
+    min-height: 14px !important;
+    max-height: 14px !important;
+
+    gap: 2px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow: visible !important;
+    box-sizing: border-box !important;
+}
+
+.character-status-card .status-skill {
+    display: flex !important;
+    width: 100% !important;
+    height: 14px !important;
+    min-width: 0 !important;
+    min-height: 14px !important;
+    max-height: 14px !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    padding: 0 2px !important;
+    margin: 0 !important;
+    gap: 0 !important;
+
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+.character-status-card .status-skill-name {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    font-size: 5px !important;
+    line-height: 12px !important;
+    text-align: center !important;
+
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.character-status-card .status-skill-power {
+    display: none !important;
+}
+
+.character-status-card .status-skill-empty {
+    grid-column: 1 / -1 !important;
+    height: 14px !important;
+    min-height: 14px !important;
+    line-height: 14px !important;
+}
+
+/* 画面高が低い場合も4技を維持 */
+@media (max-height: 700px) {
+    .character-status-card .status-skills {
+        flex-basis: 21px !important;
+        height: 21px !important;
+        min-height: 21px !important;
+        max-height: 21px !important;
+    }
+
+    .character-status-card .status-skills-title {
+        height: 6px !important;
+        min-height: 6px !important;
+        line-height: 6px !important;
+        margin-bottom: 1px !important;
+    }
+
+    .character-status-card .status-skills-list {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-template-rows: 13px !important;
+        height: 13px !important;
+        min-height: 13px !important;
+        max-height: 13px !important;
+        gap: 1px !important;
+    }
+
+    .character-status-card .status-skill {
+        height: 13px !important;
+        min-height: 13px !important;
+        max-height: 13px !important;
+    }
+
+    .character-status-card .status-skill-name {
+        font-size: 4.5px !important;
+        line-height: 11px !important;
+    }
+}
+
+
+/* ============================================================
+   MONSTER WAR - SIEGE BATTLE
+   攻城戦
+   ============================================================ */
+
+/* 16 × 16盤面 */
+.battle-field {
+    grid-template-columns: repeat(16, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(16, minmax(0, 1fr)) !important;
+}
+
+/* 城マス */
+.board-cell.siege-castle {
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(255, 215, 90, 0.18),
+            rgba(120, 90, 25, 0.24)
+        ) !important;
+    box-shadow:
+        inset 0 0 0 2px rgba(220, 180, 70, 0.85),
+        inset 0 0 18px rgba(255, 190, 50, 0.22);
+}
+
+.board-cell.siege-castle::after {
+    display: none;
+}
+
+.castle-mark {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+}
+
+.castle-mark span {
+    color: #e7c86a;
+    font-size: clamp(8px, 1.3vw, 16px);
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 1px 4px #000;
+}
+
+.castle-mark small {
+    margin-top: 2px;
+    color: #a58f50;
+    font-size: clamp(4px, 0.55vw, 7px);
+    line-height: 1;
+    letter-spacing: 0.05em;
+}
+
+/* 自軍城・敵城を識別 */
+.board-cell.siege-castle[data-castle-owner="1"] {
+    border-color: rgba(59, 130, 246, 0.65);
+}
+
+.board-cell.siege-castle[data-castle-owner="2"] {
+    border-color: rgba(239, 68, 68, 0.65);
+}
+
+/* 勝敗表示 */
+.battle-result {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    text-align: center;
+}
+
+.battle-result-label {
+    color: #777777;
+    font-size: 8px;
+    letter-spacing: 0.16em;
+}
+
+.battle-result strong {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+}
+
+.battle-result span {
+    color: #999999;
+    font-size: 8px;
+}
+
+/* 16×16表示 */
+.field-area::after {
+    content: "16 × 16";
+}
+
+/* 低い画面でも城表示を維持 */
+@media (max-height: 700px) {
+    .castle-mark span {
+        font-size: 9px;
+    }
+
+    .castle-mark small {
+        font-size: 4px;
+    }
+}
+
+
+/* ============================================================
+   MONSTER WAR - SIEGE BATTLE
+   ============================================================ */
+
+/* 攻城戦は16×16 */
+.battle-field {
+    grid-template-columns:
+        repeat(16, minmax(0, 1fr)) !important;
+
+    grid-template-rows:
+        repeat(16, minmax(0, 1fr)) !important;
+}
+
+/* 城 */
+.board-cell.siege-castle {
+    z-index: 1;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(255, 215, 90, 0.18),
+            rgba(120, 90, 25, 0.24)
+        ) !important;
+
+    box-shadow:
+        inset 0 0 0 2px
+            rgba(220, 180, 70, 0.85),
+        inset 0 0 18px
+            rgba(255, 190, 50, 0.22);
+}
+
+.board-cell.siege-castle::after {
+    display: none;
+}
+
+.board-cell.siege-castle[data-castle-owner="1"] {
+    border-color:
+        rgba(59, 130, 246, 0.7);
+}
+
+.board-cell.siege-castle[data-castle-owner="2"] {
+    border-color:
+        rgba(239, 68, 68, 0.7);
+}
+
+.castle-mark {
+    position: absolute;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    pointer-events: none;
+    user-select: none;
+
+    z-index: 1;
+}
+
+.castle-mark span {
+    color: #e7c86a;
+    font-size: clamp(9px, 1.4vw, 17px);
+    font-weight: 900;
+    line-height: 1;
+
+    text-shadow:
+        0 1px 4px #000000;
+}
+
+.castle-mark small {
+    margin-top: 2px;
+
+    color: #a58f50;
+    font-size: clamp(4px, 0.55vw, 7px);
+    line-height: 1;
+}
+
+/* 勝敗表示 */
+.battle-result {
+    flex: 1;
+    min-width: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    gap: 3px;
+    text-align: center;
+}
+
+.battle-result-label {
+    color: #777777;
+    font-size: 8px;
+    letter-spacing: 0.16em;
+}
+
+.battle-result strong {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+}
+
+.battle-result span {
+    color: #999999;
+    font-size: 8px;
+}
+
+/* 画面右下の盤面サイズ表記 */
+.field-area::after {
+    content: "16 × 16";
+}
+
+@media (max-height: 700px) {
+
+    .castle-mark span {
+        font-size: 9px;
+    }
+
+    .castle-mark small {
+        font-size: 4px;
+    }
+}
+
+
+
+/* ============================================================
+   BATTLE LOG
+   盤面の真上に表示。盤面のサイズ・位置は変更しない
+============================================================ */
+.battle-field-wrapper {
+    position: relative;
+    overflow: visible !important;
+}
+
+ .battle-log {
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: -130px !important;
+    bottom: auto !important;
+    width: 100% !important;
+    height: 120px !important;
+    box-sizing: border-box !important;
+    padding: 6px 10px !important;
+    display: block !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    pointer-events: auto !important;
+    z-index: 99999 !important;
+    background: rgba(5, 5, 5, 0.94) !important;
+    border: 1px solid #555 !important;
+    border-radius: 3px !important;
+}
+
+.battle-log-entry {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 14px !important;
+    line-height: 14px !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    color: #aaa !important;
+    font-size: 11px !important;
+}
+
+.battle-log-entry.latest {
+    color: #fff !important;
+    font-weight: 700 !important;
+}
+
+@media (max-height: 700px) {
+    .battle-log {
+        top: -60px !important;
+        height: 52px !important;
+        padding: 4px 7px !important;
+    }
+
+    .battle-log-entry {
+        height: 11px !important;
+        line-height: 11px !important;
+        font-size: 9px !important;
+    }
+}
