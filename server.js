@@ -132,13 +132,14 @@ function handleMessage(socket, message) {
 
         // PLAYER番号はクライアントではなくサーバーで一度だけ決定する。
         // 空いている最初の枠を割り当てる。
-        let playerIndex = -1;
+        let playerIndex = room.battlePlayers.findIndex(
+            player => player.name === name
+        );
 
-        for (let i = 0; i < room.battlePlayers.length; i++) {
-            if (!room.battlePlayers[i].name) {
-                playerIndex = i;
-                break;
-            }
+        if (playerIndex === -1) {
+            playerIndex = room.battlePlayers.findIndex(
+                player => !player.name
+            );
         }
 
         socket.room = room;

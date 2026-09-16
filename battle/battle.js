@@ -196,6 +196,9 @@ function connectOnlineBattle() {
         }
 
         if (message.type === "room_connected") {
+            if (message.playerNumber === 1 || message.playerNumber === 2) {
+                MY_PLAYER_NUMBER = Number(message.playerNumber);
+            }
             if (Number(message.playerNumber) === 1 || Number(message.playerNumber) === 2) {
                 MY_PLAYER_NUMBER = Number(message.playerNumber);
             }
@@ -210,11 +213,6 @@ function connectOnlineBattle() {
              * PLAYER 2の接続でもPLAYER 1用のpartyを送る等の
              * 上書きが起きるため、partyは送信しません。
              */
-            onlineSocket.send(JSON.stringify({
-                type: "room_select_table",
-                table: "battle"
-            }));
-
             onlineSocket.send(JSON.stringify({
                 type: "battle_join",
                 roomId: ONLINE_ROOM_ID,
