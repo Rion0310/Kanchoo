@@ -132,14 +132,13 @@ function handleMessage(socket, message) {
 
         // PLAYER番号はクライアントではなくサーバーで一度だけ決定する。
         // 空いている最初の枠を割り当てる。
-        let playerIndex = room.battlePlayers.findIndex(
-            player => player.name === name
-        );
+        let playerIndex = -1;
 
-        if (playerIndex === -1) {
-            playerIndex = room.battlePlayers.findIndex(
-                player => !player.name
-            );
+        for (let i = 0; i < room.battlePlayers.length; i++) {
+            if (!room.battlePlayers[i].name) {
+                playerIndex = i;
+                break;
+            }
         }
 
         socket.room = room;
@@ -196,24 +195,16 @@ function handleMessage(socket, message) {
             }
 
             if (index !== -1) {
-                const player = room.battlePlayers[index];
-                const isExistingPlayer = player.name === socket.playerName;
-
-                player.name = socket.playerName;
+                room.battlePlayers[index].name = socket.playerName;
+                room.battlePlayers[index].ready = false;
                 socket.playerNumber = index + 1;
 
                 /*
-                 * BATTLE画面からの再接続では、ROOMで確定した
-                 * ready / party を絶対に消さない。
+                 * [PARTY FIX 2: battle接続ではpartyを変更しない]
                  *
-                 * ここでready=falseにすると、room_readyで両者READY済みでも
-                 * battle_join時のsendBattleStart()が成立せず、
-                 * battle_startが送信されない。
+                 * partyの確定はROOMのroom_readyで行います。
+                 * battle画面から送られてくるpartyで上書きしません。
                  */
-                if (!isExistingPlayer) {
-                    player.ready = false;
-                    player.party = [];
-                }
             }
 
             room.spectators.delete(socket);
@@ -271,49 +262,21 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "battle_join") {
-        // BATTLE側は別WebSocketなので、playerNumberだけを信用せず、
-        // room_joinで登録したプレイヤー名から必ずP1/P2を再確定します。
-        const playerIndex = room.battlePlayers.findIndex(
-            player => player.name === socket.playerName
-        );
-
-        if (playerIndex === -1) {
+        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
             return;
         }
 
-        socket.playerNumber = playerIndex + 1;
+        /*
+         * [PARTY FIX 3: battle_joinでもpartyを上書きしない]
+         *
+         * ROOMのroom_readyで確定したpartyをそのまま使用します。
+         * これによりP2のbattle_joinがP1のpartyを上書きする
+         * 問題を防ぎます。
+         */
         socket.inBattle = true;
 
-        // READY時に保存したP1/P2のpartyを、BATTLE接続時に必ず返す。
-        // battleStartedのタイミングに依存しないため、画面遷移直後の
-        // 再接続でもparty同期が欠落しません。
-        const player1 = room.battlePlayers[0];
-        const player2 = room.battlePlayers[1];
-
-        if (
-            player1.name &&
-            player2.name &&
-            Array.isArray(player1.party) &&
-            player1.party.length > 0 &&
-            Array.isArray(player2.party) &&
-            player2.party.length > 0
-        ) {
-            send(socket, {
-                type: "battle_sync",
-                roomId: room.roomId,
-                players: [
-                    {
-                        player: 1,
-                        name: player1.name,
-                        party: player1.party.slice(0, 6)
-                    },
-                    {
-                        player: 2,
-                        name: player2.name,
-                        party: player2.party.slice(0, 6)
-                    }
-                ]
-            });
+        if (room.battleStarted) {
+            sendBattleStart(room);
         }
 
         if (room.battleState) {
@@ -458,30 +421,17 @@ wss.on("connection", socket => {
             const index = socket.playerNumber - 1;
             const player = room.battlePlayers[index];
 
-            /*
-             * ROOM -> BATTLE の画面遷移では、ROOM側のWebSocketが
-             * 一度切断されてからBATTLE側が再接続します。
-             * その瞬間にpartyを消すとBATTLEが取得できなくなるため、
-             * battleStarted後はプレイヤー情報を保持します。
-             */
-            if (
-                player.name === socket.playerName &&
-                !room.battleStarted
-            ) {
+            if (player.name === socket.playerName) {
                 player.name = "";
                 player.ready = false;
                 player.party = [];
             }
         }
 
-        /*
-         * battleStarted後はBATTLE側の再接続を待つ必要があるため、
-         * 接続が一時的に0本になってもROOMを破棄しません。
-         */
-        if (room.sockets.size === 0) {
-            if (!room.battleStarted) {
-                rooms.delete(room.roomId);
-            }
+        if (
+            room.sockets.size === 0
+        ) {
+            rooms.delete(room.roomId);
         } else {
             broadcastRoom(room);
         }

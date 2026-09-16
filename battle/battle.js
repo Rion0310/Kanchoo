@@ -196,9 +196,6 @@ function connectOnlineBattle() {
         }
 
         if (message.type === "room_connected") {
-            if (message.playerNumber === 1 || message.playerNumber === 2) {
-                MY_PLAYER_NUMBER = Number(message.playerNumber);
-            }
             if (Number(message.playerNumber) === 1 || Number(message.playerNumber) === 2) {
                 MY_PLAYER_NUMBER = Number(message.playerNumber);
             }
@@ -214,6 +211,11 @@ function connectOnlineBattle() {
              * 上書きが起きるため、partyは送信しません。
              */
             onlineSocket.send(JSON.stringify({
+                type: "room_select_table",
+                table: "battle"
+            }));
+
+            onlineSocket.send(JSON.stringify({
                 type: "battle_join",
                 roomId: ONLINE_ROOM_ID,
                 player: MY_PLAYER_NUMBER
@@ -222,10 +224,12 @@ function connectOnlineBattle() {
             return;
         }
 
-        if (message.type === "battle_start" || message.type === "battle_sync") {
-            const players = Array.isArray(message.players)
-                ? message.players
-                : [];
+        if (message.type === "battle_start") {
+            if (onlineBattleStarted) {
+                return;
+            }
+
+            const players = message.players || [];
 
             const player1 = players.find(
                 player => Number(player.player) === 1
@@ -234,39 +238,26 @@ function connectOnlineBattle() {
                 player => Number(player.player) === 2
             );
 
-            // サーバーに保存されたP1/P2のパーティだけを使用する。
+            /*
+             * [PARTY FIX 4: battle_startのpartyを唯一の初期値にする]
+             *
+             * サーバーのroom_readyで確定したpartyを受け取り、
+             * createUnits()より前に反映します。
+             */
             if (Array.isArray(player1?.party)) {
-                onlineParty1 = player1.party
-                    .map(Number)
-                    .filter(Number.isFinite)
-                    .slice(0, 6);
+                onlineParty1 = player1.party.map(Number).filter(Number.isFinite).slice(0, 6);
             }
 
             if (Array.isArray(player2?.party)) {
-                onlineParty2 = player2.party
-                    .map(Number)
-                    .filter(Number.isFinite)
-                    .slice(0, 6);
-            }
-
-            // オンラインでは両パーティが揃うまで盤面を生成しない。
-            if (
-                !Array.isArray(onlineParty1) ||
-                onlineParty1.length === 0 ||
-                !Array.isArray(onlineParty2) ||
-                onlineParty2.length === 0
-            ) {
-                console.error("オンライン対戦のP1/P2パーティ取得に失敗しました。", message);
-                return;
+                onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, 6);
             }
 
             onlineBattleStarted = true;
+
             createUnits();
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
-
-            // 初期状態の送信はP1だけが担当する。
             if (MY_PLAYER_NUMBER === 1) {
                 onlineSendState();
             }
@@ -466,7 +457,7 @@ function getCharacter(id) {
 
     return characterDatabase.find(
         character =>
-            Number(character.id) === Number(id)
+            character.id === id
     );
 
 }
@@ -1025,23 +1016,24 @@ function createUnits() {
     battleState.units = [];
 
 
-    // オンライン対戦ではサーバーから受信したpartyだけを使用します。
-    // 未同期の状態でローカルpartyへフォールバックすると、P1/P2が
-    // 同じpartyに見える原因になるため、オンライン時は生成を待ちます。
-    if (ONLINE_ROOM_ID && (!Array.isArray(onlineParty1) || !Array.isArray(onlineParty2))) {
-        return;
-    }
-
     const players = [
 
         {
-            party: ONLINE_ROOM_ID ? onlineParty2 : PLAYER_2_PARTY,
+            party:
+                onlineParty2 ??
+                (ONLINE_ROOM_ID ? [] : PLAYER_2_PARTY),
+
             player: 2
+
         },
 
         {
-            party: ONLINE_ROOM_ID ? onlineParty1 : PLAYER_1_PARTY,
+            party:
+                onlineParty1 ??
+                (ONLINE_ROOM_ID ? [] : PLAYER_1_PARTY),
+
             player: 1
+
         }
 
     ];
