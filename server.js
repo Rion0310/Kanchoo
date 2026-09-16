@@ -130,15 +130,18 @@ function handleMessage(socket, message) {
             .trim()
             .slice(0, 30) || "PLAYER";
 
-        // PLAYER番号はクライアントではなくサーバーで一度だけ決定する。
-        // 空いている最初の枠を割り当てる。
-        let playerIndex = -1;
+        // 既にROOMでPLAYER枠を取得している名前なら、
+        // BATTLE側の新しいWebSocketでも同じPLAYER枠を復元する。
+        // 既存のparty / readyは絶対に初期化しない。
+        let playerIndex = room.battlePlayers.findIndex(
+            player => player.name === name
+        );
 
-        for (let i = 0; i < room.battlePlayers.length; i++) {
-            if (!room.battlePlayers[i].name) {
-                playerIndex = i;
-                break;
-            }
+        // 新規参加者の場合だけ空いている枠を割り当てる。
+        if (playerIndex === -1) {
+            playerIndex = room.battlePlayers.findIndex(
+                player => !player.name
+            );
         }
 
         socket.room = room;
@@ -147,9 +150,16 @@ function handleMessage(socket, message) {
         if (playerIndex !== -1) {
             socket.playerNumber = playerIndex + 1;
 
-            room.battlePlayers[playerIndex].name = name;
-            room.battlePlayers[playerIndex].ready = false;
-            room.battlePlayers[playerIndex].party = [];
+            const player = room.battlePlayers[playerIndex];
+            const isExistingPlayer = player.name === name;
+
+            player.name = name;
+
+            // BATTLE側の再接続では、ROOMで確定したparty / readyを保持する。
+            if (!isExistingPlayer) {
+                player.ready = false;
+                player.party = [];
+            }
         } else {
             // 3人目以降は観戦者
             socket.playerNumber = 0;
@@ -414,9 +424,14 @@ wss.on("connection", socket => {
             const player = room.battlePlayers[index];
 
             if (player.name === socket.playerName) {
-                player.name = "";
-                player.ready = false;
-                player.party = [];
+                // ROOM → BATTLEではWebSocketが切り替わるため、
+                // ROOM側の切断だけでPLAYER情報を消さない。
+                // battleStarted後はもちろん、再接続前のpartyも保持する。
+                if (!room.battleStarted) {
+                    player.name = "";
+                    player.ready = false;
+                    player.party = [];
+                }
             }
         }
 
