@@ -196,6 +196,29 @@
         );
     }
 
+    function resolveMyPlayerNumber() {
+        if (
+            myPlayerNumber === 1 ||
+            myPlayerNumber === 2
+        ) {
+            return myPlayerNumber;
+        }
+
+        const players =
+            roomState.battlePlayers || [];
+
+        const index = players.findIndex(
+            player =>
+                player?.name === playerName
+        );
+
+        if (index === 0 || index === 1) {
+            myPlayerNumber = index + 1;
+        }
+
+        return myPlayerNumber;
+    }
+
     function renderRoom() {
         if (
             playerNameDisplay
@@ -316,7 +339,7 @@
                 ]?.ready;
 
             readyButton.disabled =
-                false
+                !isPlayer;
 
             const label =
                 readyButton.querySelector(
@@ -476,9 +499,9 @@
                 ) {
                     myPlayerNumber =
                         assignedPlayerNumber;
-                } else {
-                    myPlayerNumber = 0;
                 }
+
+                resolveMyPlayerNumber();
 
                 roomState.roomId =
                     FIXED_ROOM_ID;
@@ -548,6 +571,8 @@
     }
 
     function toggleReady() {
+        resolveMyPlayerNumber();
+
         if (
             myPlayerNumber !== 1 &&
             myPlayerNumber !== 2
