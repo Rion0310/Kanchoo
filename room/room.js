@@ -7,16 +7,55 @@
     const FIXED_ROOM_ID =
         "MONSTER_WAR";
 
-    const playerName =
-        (
+    function getPlayerName() {
+        const savedName =
             localStorage.getItem(
                 PLAYER_NAME_STORAGE_KEY
-            ) ||
-            "PLAYER"
-        )
-            .trim()
-            .slice(0, 12) ||
-        "PLAYER";
+            );
+
+        if (savedName) {
+            const useSavedName =
+                window.confirm(
+                    `プレイヤーネーム「${savedName}」を使用しますか？`
+                );
+
+            if (useSavedName) {
+                return savedName
+                    .trim()
+                    .slice(0, 12) || "PLAYER";
+            }
+        }
+
+        while (true) {
+            const input =
+                window.prompt(
+                    "プレイヤーネームを入力してください。"
+                );
+
+            if (input === null) {
+                window.location.href =
+                    "../title/title.html";
+                return "PLAYER";
+            }
+
+            const name =
+                input.trim().slice(0, 12);
+
+            if (name) {
+                localStorage.setItem(
+                    PLAYER_NAME_STORAGE_KEY,
+                    name
+                );
+                return name;
+            }
+
+            window.alert(
+                "プレイヤーネームを入力してください。"
+            );
+        }
+    }
+
+    const playerName = getPlayerName();
 
     const playerNameDisplay =
         document.getElementById(

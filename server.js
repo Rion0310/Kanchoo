@@ -108,14 +108,59 @@ function handleMessage(socket, message) {
         const room = getOrCreateRoom(data.roomId);
         if (!room) return;
 
+        // 同じソケットからの二重JOINを防止
+        if (socket.room) {
+            if (socket.room === room) {
+                send(socket, {
+                    type: "room_connected",
+                    roomId: room.roomId,
+                    playerNumber: socket.playerNumber
+                });
+                send(socket, {
+                    type: "room_state",
+                    room: publicRoom(room),
+                    yourPlayerNumber: socket.playerNumber
+                });
+            }
+            return;
+        }
+
+        const name = String(data.playerName || "PLAYER")
+            .trim()
+            .slice(0, 30) || "PLAYER";
+
+        // PLAYER番号はクライアントではなくサーバーで一度だけ決定する。
+        // 空いている最初の枠を割り当てる。
+        let playerIndex = -1;
+
+        for (let i = 0; i < room.battlePlayers.length; i++) {
+            if (!room.battlePlayers[i].name) {
+                playerIndex = i;
+                break;
+            }
+        }
+
         socket.room = room;
-        socket.playerName = String(data.playerName || "PLAYER").slice(0, 30);
+        socket.playerName = name;
+
+        if (playerIndex !== -1) {
+            socket.playerNumber = playerIndex + 1;
+
+            room.battlePlayers[playerIndex].name = name;
+            room.battlePlayers[playerIndex].ready = false;
+            room.battlePlayers[playerIndex].party = [];
+        } else {
+            // 3人目以降は観戦者
+            socket.playerNumber = 0;
+            room.spectators.add(socket);
+        }
 
         room.sockets.add(socket);
 
         send(socket, {
             type: "room_connected",
-            roomId: room.roomId
+            roomId: room.roomId,
+            playerNumber: socket.playerNumber
         });
 
         broadcastRoom(room);
@@ -163,8 +208,11 @@ function handleMessage(socket, message) {
         }
 
         if (table === "spectator") {
-            socket.playerNumber = 0;
-            room.spectators.add(socket);
+            // すでにPLAYERとして割り当てられている接続を
+            // 卓選択だけでPLAYER枠から外さない。
+            if (socket.playerNumber === 0) {
+                room.spectators.add(socket);
+            }
             broadcastRoom(room);
             return;
         }
@@ -179,11 +227,21 @@ function handleMessage(socket, message) {
         }
 
         const index = socket.playerNumber - 1;
-        room.battlePlayers[index].ready = !!data.ready;
+        const player = room.battlePlayers[index];
+
+        // このスロットを所有している接続以外からの更新を拒否。
+        if (player.name !== socket.playerName) {
+            return;
+        }
+
+        player.ready = data.ready === true;
 
         if (Array.isArray(data.party)) {
-            room.battlePlayers[index].party =
-                data.party.map(Number).filter(Number.isFinite).slice(0, 6);
+            player.party =
+                data.party
+                    .map(Number)
+                    .filter(Number.isFinite)
+                    .slice(0, 6);
         }
 
         broadcastRoom(room);
@@ -346,10 +404,13 @@ wss.on("connection", socket => {
         room.spectators.delete(socket);
 
         if (socket.playerNumber === 1 || socket.playerNumber === 2) {
-            const player = room.battlePlayers[socket.playerNumber - 1];
+            const index = socket.playerNumber - 1;
+            const player = room.battlePlayers[index];
 
             if (player.name === socket.playerName) {
+                player.name = "";
                 player.ready = false;
+                player.party = [];
             }
         }
 
