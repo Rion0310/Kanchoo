@@ -124,7 +124,19 @@ function onlineSendState() {
 function applyOnlineState(state) {
     if (!state || typeof state !== "object") return;
 
+    /*
+     * [FIX 6: オンライン状態受信]
+     * party1 / party2 もサーバーから受け取り、双方のパーティを同期します。
+     */
     onlineApplyingState = true;
+
+    if (Array.isArray(state.party1)) {
+        onlineParty1 = state.party1;
+    }
+
+    if (Array.isArray(state.party2)) {
+        onlineParty2 = state.party2;
+    }
 
     battleState.turn = Number(state.turn || 1);
     battleState.currentPlayer = Number(state.currentPlayer || 1);
@@ -158,10 +170,119 @@ function applyOnlineState(state) {
     clearCellStates();
     renderUnitIcons();
     renderPlayerPanels();
-    updateControlPanel();
+
+    /*
+     * [FIX 7: バトルログを確実に再描画]
+     * 配列だけ同期してDOMを更新していなかったため、
+     * 相手側の「待機」「ターン終了」ログが見えない問題を修正。
+     */
+    const onlineLog = ensureBattleLog();
+
+    if (onlineLog) {
+        onlineLog.innerHTML = "";
+
+        battleState.battleLogs.forEach(
+            (messageText, index) => {
+                const entry =
+                    document.createElement("div");
+
+                entry.className =
+                    "battle-log-entry";
+
+                if (
+                    index ===
+                    battleState.battleLogs.length - 1
+                ) {
+                    entry.classList.add("latest");
+                }
+
+                entry.textContent = messageText;
+                onlineLog.appendChild(entry);
+            }
+        );
+
+        onlineLog.scrollTop =
+            onlineLog.scrollHeight;
+    }
+
+    /*
+     * [FIX 8: 敗北側にも結果画面を表示]
+     */
+    if (battleState.gameOver) {
+        renderOnlineBattleResult();
+    } else {
+        updateControlPanel();
+    }
 
     onlineApplyingState = false;
 }
+
+/*
+ * [FIX 9: 敗北時のフリーズ対策]
+ * gameOverを受信した側でも勝敗結果を描画します。
+ */
+function renderOnlineBattleResult() {
+
+    const panel =
+        document.getElementById(
+            "battle-control-panel"
+        );
+
+    if (!panel) {
+        return;
+    }
+
+    const alive1 =
+        battleState.units.some(
+            unit =>
+                unit.player === 1 &&
+                unit.alive
+        );
+
+    const alive2 =
+        battleState.units.some(
+            unit =>
+                unit.player === 2 &&
+                unit.alive
+        );
+
+    let winner = 1;
+    let reason = "対戦終了";
+
+    if (!alive1 && alive2) {
+        winner = 2;
+        reason = "PLAYER 1の全滅";
+    } else if (!alive2 && alive1) {
+        winner = 1;
+        reason = "PLAYER 2の全滅";
+    } else {
+        const lastLog =
+            battleState.battleLogs[
+                battleState.battleLogs.length - 1
+            ];
+
+        if (lastLog) {
+            reason = lastLog;
+        }
+    }
+
+    panel.innerHTML = `
+        <div class="battle-result">
+            <div class="battle-result-label">
+                SIEGE BATTLE
+            </div>
+
+            <strong>
+                PLAYER ${winner} WIN
+            </strong>
+
+            <span>
+                ${reason}
+            </span>
+        </div>
+    `;
+}
+
 
 function connectOnlineBattle() {
     if (!ONLINE_ROOM_ID) return;
@@ -232,6 +353,15 @@ function connectOnlineBattle() {
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
+
+            /*
+             * [FIX 10: 初期状態の二重送信防止]
+             * PLAYER 1だけが初期battle_stateを登録します。
+             */
+            if (MY_PLAYER_NUMBER === 1) {
+                onlineSendState();
+            }
+
             return;
         }
 
@@ -755,6 +885,11 @@ function renderCastles() {
 }
 
 
+/*
+ * [FIX 13: 勝敗表示]
+ * ローカル勝敗判定は従来通りshowBattleResult()、
+ * オンライン受信側はrenderOnlineBattleResult()を使用します。
+ */
 function showBattleResult(
     winner,
     reason
@@ -1920,6 +2055,20 @@ function selectBluffType(unit, type) {
 
     battleState.bluffUnits.add(
         unit.unitId
+    );
+
+    /*
+     * [FIX 12: ブラフ待機ログ]
+     * ブラフをセットした行動も「待機」として明示します。
+     */
+    const bluffNames = {
+        ketsukacchin: "ケツカッチン",
+        ketsuiki: "ケツイキ",
+        dappunta: "脱糞ター"
+    };
+
+    addBattleLog(
+        `${unit.name}は${bluffNames[type] || "ブラフ"}を仕込んで待機した！`
     );
 
     finishUnitAction();
@@ -3338,27 +3487,40 @@ function endTurn() {
         return;
     }
 
-    if (
-        ONLINE_ROOM_ID &&
-        onlineSocket &&
-        onlineSocket.readyState === WebSocket.OPEN
-    ) {
-        onlineSocket.send(JSON.stringify({
-            type: "battle_end_turn",
-            roomId: ONLINE_ROOM_ID,
-            player: MY_PLAYER_NUMBER
-        }));
+    /*
+     * [FIX 11: オンラインターン交代]
+     * オンラインではサーバーへTURN ENDだけを通知し、
+     * currentPlayer / turn の変更はサーバーに任せます。
+     */
+    if (ONLINE_ROOM_ID) {
+
+        if (
+            !onlineSocket ||
+            onlineSocket.readyState !== WebSocket.OPEN
+        ) {
+            return;
+        }
+
+        onlineSocket.send(
+            JSON.stringify({
+                type: "battle_end_turn",
+                roomId: ONLINE_ROOM_ID,
+                player: MY_PLAYER_NUMBER
+            })
+        );
+
         return;
     }
+
+    // オフライン時は従来通りローカルで処理。
+    addBattleLog(
+        `PLAYER ${battleState.currentPlayer}のターン終了。` +
+        `PLAYER ${battleState.currentPlayer === 1 ? 2 : 1}のターン開始！`
+    );
 
     battleState.selectedUnitId = null;
     battleState.movableCells = [];
     battleState.actionPhase = null;
-    battleState.skillPhase = null;
-    battleState.skillDirection = null;
-    battleState.skillTargetCells = [];
-    battleState.skillSelectedTargetCells = [];
-    battleState.selectedSkillId = null;
     battleState.movedUnits.clear();
 
     clearCellStates();
@@ -3374,6 +3536,7 @@ function endTurn() {
     renderPlayerPanels();
     updateControlPanel();
 }
+
 
 /* ========================================
    CONTROL PANEL

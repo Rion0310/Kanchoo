@@ -130,17 +130,15 @@ function handleMessage(socket, message) {
             .trim()
             .slice(0, 30) || "PLAYER";
 
-        // PLAYER番号はサーバーで決定する。
-        // 既に同じ名前のPLAYERがいる場合は、その枠を再利用する。
-        let playerIndex = room.battlePlayers.findIndex(
-            player => player.name === name
-        );
+        // PLAYER番号はクライアントではなくサーバーで一度だけ決定する。
+        // 空いている最初の枠を割り当てる。
+        let playerIndex = -1;
 
-        // 同じ名前がいなければ、空いている最初の枠を割り当てる。
-        if (playerIndex === -1) {
-            playerIndex = room.battlePlayers.findIndex(
-                player => !player.name
-            );
+        for (let i = 0; i < room.battlePlayers.length; i++) {
+            if (!room.battlePlayers[i].name) {
+                playerIndex = i;
+                break;
+            }
         }
 
         socket.room = room;
@@ -177,36 +175,54 @@ function handleMessage(socket, message) {
         const table = data.table;
 
         if (table === "battle") {
-            // PLAYER番号は room_join 時にサーバーが決定済み。
-            // ここでは番号を再割り当てせず、現在の枠を維持する。
-            if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
-                const index = room.battlePlayers.findIndex(
-                    player => !player.name
-                );
+            /*
+             * [FIX 1: READY状態を維持]
+             * battle側のroom_select_tableでREADYをfalseに戻すと、
+             * 対戦画面への接続だけでROOMの準備状態が解除されます。
+             * READYの変更はroom_readyだけが担当します。
+             */
+            let index = -1;
 
-                if (index !== -1) {
-                    socket.playerNumber = index + 1;
-                    room.battlePlayers[index].name = socket.playerName;
-                    room.battlePlayers[index].ready = false;
-                    room.battlePlayers[index].party = [];
+            if (
+                socket.playerNumber === 1 ||
+                socket.playerNumber === 2
+            ) {
+                const ownedIndex = socket.playerNumber - 1;
+
+                if (
+                    room.battlePlayers[ownedIndex].name ===
+                    socket.playerName
+                ) {
+                    index = ownedIndex;
                 }
             }
 
-            if (socket.playerNumber === 1 || socket.playerNumber === 2) {
-                const player =
-                    room.battlePlayers[socket.playerNumber - 1];
+            if (index === -1) {
+                index = room.battlePlayers.findIndex(
+                    player =>
+                        player.name === socket.playerName
+                );
+            }
 
-                // 自分のスロットだけ更新する。
-                if (player.name === socket.playerName) {
-                    player.ready = false;
+            if (index === -1) {
+                index = room.battlePlayers.findIndex(
+                    player => !player.name
+                );
+            }
 
-                    if (Array.isArray(data.party)) {
-                        player.party = data.party
+            if (index !== -1) {
+                room.battlePlayers[index].name = socket.playerName;
+                socket.playerNumber = index + 1;
+
+                if (Array.isArray(data.party) && data.party.length > 0) {
+                    room.battlePlayers[index].party =
+                        data.party
                             .map(Number)
                             .filter(Number.isFinite)
                             .slice(0, 6);
-                    }
                 }
+
+                // READY状態はここでは変更しない。
             }
 
             room.spectators.delete(socket);
@@ -261,9 +277,16 @@ function handleMessage(socket, message) {
             return;
         }
 
-        if (Array.isArray(data.party)) {
+        /*
+         * [FIX 2: パーティ同期]
+         * 空のpartyでは既存の確定パーティを上書きしません。
+         */
+        if (Array.isArray(data.party) && data.party.length > 0) {
             room.battlePlayers[socket.playerNumber - 1].party =
-                data.party.map(Number).filter(Number.isFinite).slice(0, 6);
+                data.party
+                    .map(Number)
+                    .filter(Number.isFinite)
+                    .slice(0, 6);
         }
 
         socket.inBattle = true;
@@ -276,63 +299,10 @@ function handleMessage(socket, message) {
             send(socket, {
                 type: "battle_state",
                 state: room.battleState,
+                party1: room.battlePlayers[0].party || [],
+                party2: room.battlePlayers[1].party || [],
                 sender: "server"
             });
-        }
-
-        return;
-    }
-
-    if (data.type === "battle_end_turn") {
-        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
-            return;
-        }
-
-        if (!socket.inBattle) return;
-
-        // まだ初期battle_stateを受け取っていない場合は、
-        // クライアントのユニット状態を空にしないため何もしない。
-        if (!room.battleState) {
-            return;
-        }
-
-        const sender = Number(socket.playerNumber);
-        const currentPlayer = Number(room.battleState.currentPlayer || 1);
-
-        if (sender !== currentPlayer) {
-            return;
-        }
-
-        room.battleState.selectedUnitId = null;
-        room.battleState.movableCells = [];
-        room.battleState.actionPhase = null;
-        room.battleState.skillPhase = null;
-        room.battleState.skillDirection = null;
-        room.battleState.skillTargetCells = [];
-        room.battleState.skillSelectedTargetCells = [];
-        room.battleState.selectedSkillId = null;
-        room.battleState.movedUnits = [];
-
-        if (currentPlayer === 1) {
-            room.battleState.currentPlayer = 2;
-        } else {
-            room.battleState.currentPlayer = 1;
-            room.battleState.turn = Number(room.battleState.turn || 1) + 1;
-        }
-
-        room.expectedPlayer = room.battleState.currentPlayer;
-
-        for (const peer of room.sockets) {
-            if (
-                peer.inBattle &&
-                peer.readyState === WebSocket.OPEN
-            ) {
-                send(peer, {
-                    type: "battle_state",
-                    state: room.battleState,
-                    sender: "server"
-                });
-            }
         }
 
         return;
@@ -354,37 +324,135 @@ function handleMessage(socket, message) {
 
         const sender = Number(socket.playerNumber);
 
-        // 最初のbattle_stateだけは、先に到着したPLAYERから受け付ける。
-        // 以降はサーバーが管理する現在PLAYERだけが更新できる。
-        if (room.battleState && sender !== room.expectedPlayer) {
-            return;
-        }
-
-        if (room.battleState) {
-            if (Number(incomingState.currentPlayer) !== Number(room.battleState.currentPlayer)) {
+        /*
+         * [FIX 3: 初期盤面の競合防止]
+         * battle_start直後はserver側のbattleStateがnullです。
+         * PLAYER 1だけが初期状態を登録します。
+         */
+        if (!room.battleState) {
+            if (sender !== 1) {
                 return;
             }
-        }
 
-        room.battleState = incomingState;
+            room.battleState = {
+                ...incomingState,
+                turn: 1,
+                currentPlayer: 1,
+                party1: room.battlePlayers[0].party || [],
+                party2: room.battlePlayers[1].party || []
+            };
 
-        const nextPlayer =
-            Number(incomingState.currentPlayer);
+            room.expectedPlayer = 1;
+        } else {
+            /*
+             * [FIX 4: ターン権限をサーバー側で固定]
+             * currentPlayer / turn はbattle_stateから変更させません。
+             * ターン交代はbattle_end_turnだけが行います。
+             */
+            if (sender !== room.expectedPlayer) {
+                return;
+            }
 
-        if (nextPlayer === 1 || nextPlayer === 2) {
-            room.expectedPlayer = nextPlayer;
+            room.battleState = {
+                ...room.battleState,
+                ...incomingState,
+                turn: room.battleState.turn,
+                currentPlayer: room.battleState.currentPlayer,
+                party1: room.battlePlayers[0].party || [],
+                party2: room.battlePlayers[1].party || []
+            };
         }
 
         for (const peer of room.sockets) {
             if (
-                peer !== socket &&
                 peer.inBattle &&
                 peer.readyState === WebSocket.OPEN
             ) {
                 send(peer, {
                     type: "battle_state",
                     state: room.battleState,
+                    party1: room.battlePlayers[0].party || [],
+                    party2: room.battlePlayers[1].party || [],
                     sender: socket.playerNumber
+                });
+            }
+        }
+
+        return;
+    }
+
+    /*
+     * [FIX 5: サーバー側ターン終了]
+     * TURN ENDはクライアントがcurrentPlayerを直接変更せず、
+     * サーバーがPLAYER 1 -> PLAYER 2 -> PLAYER 1へ交代します。
+     * ターン終了ログもここで生成して両画面へ送ります。
+     */
+    if (data.type === "battle_end_turn") {
+        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+            return;
+        }
+
+        if (!socket.inBattle || !room.battleState) {
+            return;
+        }
+
+        const sender = Number(socket.playerNumber);
+
+        if (sender !== room.expectedPlayer) {
+            return;
+        }
+
+        if (room.battleState.gameOver || room.battleState.actionPhase) {
+            return;
+        }
+
+        const state = {
+            ...room.battleState,
+            selectedUnitId: null,
+            movableCells: [],
+            actionPhase: null,
+            skillPhase: null,
+            skillDirection: null,
+            skillTargetCells: [],
+            skillSelectedTargetCells: [],
+            selectedSkillId: null,
+            movedUnits: [],
+            battleLogs: Array.isArray(room.battleState.battleLogs)
+                ? [...room.battleState.battleLogs]
+                : [],
+            party1: room.battlePlayers[0].party || [],
+            party2: room.battlePlayers[1].party || []
+        };
+
+        const nextPlayer = sender === 1 ? 2 : 1;
+
+        if (sender === 1) {
+            state.battleLogs.push(
+                "PLAYER 1のターン終了。PLAYER 2のターン開始！"
+            );
+        } else {
+            state.turn = Number(state.turn || 1) + 1;
+            state.battleLogs.push(
+                "PLAYER 2のターン終了。PLAYER 1のターン開始！"
+            );
+        }
+
+        state.currentPlayer = nextPlayer;
+
+        room.battleState = state;
+        room.expectedPlayer = nextPlayer;
+
+        for (const peer of room.sockets) {
+            if (
+                peer.inBattle &&
+                peer.readyState === WebSocket.OPEN
+            ) {
+                send(peer, {
+                    type: "battle_state",
+                    state: room.battleState,
+                    party1: room.battlePlayers[0].party || [],
+                    party2: room.battlePlayers[1].party || [],
+                    sender: "server"
                 });
             }
         }
