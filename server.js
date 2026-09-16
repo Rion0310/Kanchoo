@@ -16,7 +16,7 @@ function createRoom(roomId) {
         ],
         spectators: new Set(),
         sockets: new Set(),
-        battleStarted: false,
+        battleStarted: false,//
         battleState: null,
         expectedPlayer: 1
     };
