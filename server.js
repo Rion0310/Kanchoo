@@ -197,8 +197,17 @@ function handleMessage(socket, message) {
             }
 
             if (index !== -1) {
-                room.battlePlayers[index].name = socket.playerName;
-                room.battlePlayers[index].ready = false;
+                const player = room.battlePlayers[index];
+                const isExistingPlayer = player.name === socket.playerName;
+
+                player.name = socket.playerName;
+
+                // BATTLEへの再接続ではROOMで確定したparty / readyを保持する。
+                if (!isExistingPlayer) {
+                    player.ready = false;
+                    player.party = [];
+                }
+
                 socket.playerNumber = index + 1;
 
                 /*
@@ -438,7 +447,11 @@ wss.on("connection", socket => {
         if (
             room.sockets.size === 0
         ) {
-            rooms.delete(room.roomId);
+            // ROOM → BATTLEでは一時的に全WebSocketが閉じることがある。
+            // 対戦開始済みなら、BATTLE側が再接続するまでroomを保持する。
+            if (!room.battleStarted) {
+                rooms.delete(room.roomId);
+            }
         } else {
             broadcastRoom(room);
         }
