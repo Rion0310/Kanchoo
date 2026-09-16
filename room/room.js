@@ -316,7 +316,7 @@
                 ]?.ready;
 
             readyButton.disabled =
-                !isPlayer;
+                false
 
             const label =
                 readyButton.querySelector(
