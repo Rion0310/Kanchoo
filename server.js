@@ -272,7 +272,14 @@ const server = http.createServer((req, res) => {
     );
 
     if (requestPath === "/") {
-        requestPath = "/title/title.html";
+        // / から直接 title/title.html を返すと、title.html 内の
+        // 相対パス（title.css / title.js）が /title.css /title.js として
+        // 解決されてしまうため、タイトル画面へリダイレクトします。
+        res.writeHead(302, {
+            Location: "/title/title.html"
+        });
+        res.end();
+        return;
     }
 
     const filePath = path.normalize(
