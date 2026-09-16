@@ -121,6 +121,8 @@
 
     let myPlayerNumber = 0;
 
+    let myReady = false;
+
     let battleStartedHandled =
         false;
 
@@ -554,6 +556,12 @@
                         receivedPlayerNumber;
                 }
 
+                resolveMyPlayerNumber();
+
+                if (myPlayerNumber === 1 || myPlayerNumber === 2) {
+                    myReady = !!roomState.battlePlayers?.[myPlayerNumber - 1]?.ready;
+                }
+
                 renderRoom();
 
                 break;
@@ -615,11 +623,20 @@
                 index
             ]?.ready;
 
-        send({
+        myReady = !currentReady;
+
+        renderRoom();
+
+        const sent = send({
             type: "room_ready",
-            ready: !currentReady,
+            ready: myReady,
             party: getParty()
         });
+
+        if (!sent) {
+            myReady = currentReady;
+            renderRoom();
+        }
     }
 
     /*
