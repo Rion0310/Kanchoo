@@ -121,6 +121,8 @@
 
     let myPlayerNumber = 0;
 
+    let myReady = false;
+
     let battleStartedHandled =
         false;
 
@@ -328,26 +330,16 @@
         if (
             readyButton
         ) {
-            // サーバー接続後、まず自分のPLAYER番号を確定する。
-            resolveMyPlayerNumber();
-
             const isPlayer =
                 myPlayerNumber === 1 ||
                 myPlayerNumber === 2;
 
-            const connected =
-                !!socket &&
-                socket.readyState === WebSocket.OPEN;
-
             const ready =
                 isPlayer &&
-                !!players[
-                    myPlayerNumber - 1
-                ]?.ready;
+                myReady;
 
-            // PLAYER 1/2 なら、接続完了後に必ず押せる状態にする。
             readyButton.disabled =
-                !isPlayer || !connected;
+                !isPlayer;
 
             const label =
                 readyButton.querySelector(
@@ -427,8 +419,6 @@
                     "ONLINE",
                     true
                 );
-
-                renderRoom();
 
                 /*
                  * ルームIDは送るが、
@@ -543,8 +533,21 @@
                 ) {
                     myPlayerNumber =
                         receivedPlayerNumber;
-                } else {
-                    resolveMyPlayerNumber();
+                }
+
+                resolveMyPlayerNumber();
+
+                const index =
+                    myPlayerNumber - 1;
+
+                if (
+                    myPlayerNumber === 1 ||
+                    myPlayerNumber === 2
+                ) {
+                    myReady =
+                        !!roomState
+                            .battlePlayers?.[index]
+                            ?.ready;
                 }
 
                 renderRoom();
@@ -602,17 +605,24 @@
         const index =
             myPlayerNumber - 1;
 
-        const currentReady =
-            !!roomState
-                .battlePlayers?.[
-                index
-            ]?.ready;
+        const targetReady = !myReady;
 
-        send({
+        // 画面を先に更新し、サーバーからのroom_stateで確定します。
+        myReady = targetReady;
+        renderRoom();
+
+        const sent = send({
             type: "room_ready",
-            ready: !currentReady,
+            ready: targetReady,
             party: getParty()
         });
+
+        if (!sent) {
+            myReady = !targetReady;
+            renderRoom();
+            setConnectionStatus("SERVER OFFLINE");
+            return;
+        }
     }
 
     /*
