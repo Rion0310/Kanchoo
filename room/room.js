@@ -6,7 +6,7 @@ const PLAYER_NAME_STORAGE_KEY = "monsterWarPlayerName";
 
 const params = new URLSearchParams(window.location.search);
 const requestedRoomId =
-    (params.get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+    "CHINKO";
 
 const playerName =
     localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "PLAYER";
