@@ -216,32 +216,47 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "room_ready") {
-        if (
-            socket.playerNumber !== 1 &&
-            socket.playerNumber !== 2
-        ) {
+        // READY状態は接続中のソケット自身のPLAYER番号を基準に更新する。
+        // クライアントからplayerNumber/nameが送られてきても、それを信用しない。
+        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+            send(socket, {
+                type: "room_error",
+                message: "PLAYERとして参加していないためREADYにできません。"
+            });
             return;
         }
 
         const index = socket.playerNumber - 1;
         const player = room.battlePlayers[index];
 
-        // このスロットを所有している接続以外からの更新を拒否。
-        if (player.name !== socket.playerName) {
+        // 現在のPLAYER枠と接続を照合。
+        if (!player || player.name !== socket.playerName) {
+            send(socket, {
+                type: "room_error",
+                message: "PLAYER情報が一致しません。"
+            });
             return;
         }
 
-        player.ready = data.ready === true;
+        // true/falseを明示的に受け取り、文字列"true"にも対応する。
+        const ready =
+            data.ready === true ||
+            data.ready === "true";
 
+        player.ready = ready;
+
+        // パーティーはREADY時に送られてきたものだけ確定。
         if (Array.isArray(data.party)) {
-            player.party =
-                data.party
-                    .map(Number)
-                    .filter(Number.isFinite)
-                    .slice(0, 6);
+            player.party = data.party
+                .map(Number)
+                .filter(Number.isFinite)
+                .slice(0, 6);
         }
 
+        // READY更新を即座に全クライアントへ同期。
         broadcastRoom(room);
+
+        // 両PLAYERがREADYならbattle_startを送る。
         sendBattleStart(room);
         return;
     }
