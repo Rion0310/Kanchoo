@@ -320,7 +320,7 @@ function handleMessage(socket, message) {
         }
 
         return;
-    }
+    }}
 }
 
 const server = http.createServer((req, res) => {
@@ -425,4 +425,4 @@ wss.on("connection", socket => {
 
 server.listen(PORT, () => {
     console.log(`MONSTER WAR server: http://localhost:${PORT}`);
-})};
+});
