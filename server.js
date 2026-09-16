@@ -65,10 +65,6 @@ function sendBattleStart(room) {
     if (!room.battlePlayers[0].name || !room.battlePlayers[1].name) return;
     if (!room.battlePlayers[0].ready || !room.battlePlayers[1].ready) return;
 
-    // 両プレイヤーのpartyが揃っていない状態ではBATTLEを開始しない。
-    if (!Array.isArray(room.battlePlayers[0].party) || room.battlePlayers[0].party.length === 0) return;
-    if (!Array.isArray(room.battlePlayers[1].party) || room.battlePlayers[1].party.length === 0) return;
-
     room.battleStarted = true;
 
     const payload = {
@@ -279,22 +275,13 @@ function handleMessage(socket, message) {
             return;
         }
 
-        const index = socket.playerNumber - 1;
-        const player = room.battlePlayers[index];
-
-        if (!player || player.name !== socket.playerName) {
-            return;
-        }
-
-        // BATTLE画面自身が持っているパーティを、そのPLAYER番号の枠へ保存する。
-        // ROOM画面の接続が切れた後でも、BATTLE画面から確実に再取得できる。
-        if (Array.isArray(data.party)) {
-            player.party = data.party
-                .map(Number)
-                .filter(Number.isFinite)
-                .slice(0, 6);
-        }
-
+        /*
+         * [PARTY FIX 3: battle_joinでもpartyを上書きしない]
+         *
+         * ROOMのroom_readyで確定したpartyをそのまま使用します。
+         * これによりP2のbattle_joinがP1のpartyを上書きする
+         * 問題を防ぎます。
+         */
         socket.inBattle = true;
 
         // BATTLE画面が後から接続しても、ROOMで確定済みの
@@ -456,26 +443,31 @@ wss.on("connection", socket => {
         room.sockets.delete(socket);
         room.spectators.delete(socket);
 
-        if (socket.playerNumber === 1 || socket.playerNumber === 2) {
+        if (
+            (socket.playerNumber === 1 || socket.playerNumber === 2) &&
+            !room.battleStarted
+        ) {
             const index = socket.playerNumber - 1;
             const player = room.battlePlayers[index];
 
             if (player.name === socket.playerName) {
-                // ROOM → BATTLEの画面遷移ではROOM側WebSocketが一度切断される。
-                // すでにバトル開始済みならPLAYER枠とpartyを保持し、
-                // BATTLE側の新しい接続が同じPLAYER番号を引き継げるようにする。
-                if (!room.battleStarted) {
-                    player.name = "";
-                    player.ready = false;
-                    player.party = [];
-                }
+                player.name = "";
+                player.ready = false;
+                player.party = [];
             }
         }
 
-        if (
-            room.sockets.size === 0
-        ) {
-            rooms.delete(room.roomId);
+        /*
+         * ROOM → BATTLE遷移では、ROOM側のWebSocketが先に閉じても
+         * BATTLE側が再接続するまでルーム情報を保持する。
+         *
+         * battleStarted後にplayer.partyを消すと、BATTLE側が
+         * battle_joinしてもP1/P2のパーティを取得できなくなる。
+         */
+        if (room.sockets.size === 0) {
+            if (!room.battleStarted) {
+                rooms.delete(room.roomId);
+            }
         } else {
             broadcastRoom(room);
         }

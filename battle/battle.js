@@ -213,13 +213,10 @@ function connectOnlineBattle() {
              * PLAYER 2の接続でもPLAYER 1用のpartyを送る等の
              * 上書きが起きるため、partyは送信しません。
              */
-            const localParty = loadPlayer1Party();
-
             onlineSocket.send(JSON.stringify({
                 type: "battle_join",
                 roomId: ONLINE_ROOM_ID,
-                player: MY_PLAYER_NUMBER,
-                party: localParty
+                player: MY_PLAYER_NUMBER
             }));
 
             return;
@@ -3645,7 +3642,15 @@ function initialize() {
 
     ensureBattleLog();
 
-    createUnits();
+    /*
+     * オンライン対戦では、サーバーからP1/P2のpartyを
+     * 受信するまでユニットを生成しない。
+     *
+     * ローカル対戦だけ従来どおり即時生成する。
+     */
+    if (!ONLINE_ROOM_ID) {
+        createUnits();
+    }
 
     /*
      * 初期配置を盤面へ表示
