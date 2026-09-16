@@ -484,13 +484,21 @@
                     roomState;
 
                 /*
-                 * サーバーから
-                 * 自分のPLAYER番号を受け取る。
+                 * room_stateにも自分のPLAYER番号が
+                 * 含まれる場合だけ更新する。
                  */
-                myPlayerNumber =
+                const receivedPlayerNumber =
                     Number(
                         message.yourPlayerNumber
-                    ) || 0;
+                    );
+
+                if (
+                    receivedPlayerNumber === 1 ||
+                    receivedPlayerNumber === 2
+                ) {
+                    myPlayerNumber =
+                        receivedPlayerNumber;
+                }
 
                 /*
                  * 1・2なら対戦プレイヤー。
@@ -512,11 +520,6 @@
                     true;
 
                 const myPlayer =
-                    message.players?.find(
-                        player =>
-                            player.name ===
-                            playerName
-                    )?.player ||
                     myPlayerNumber;
 
                 window.location.href =

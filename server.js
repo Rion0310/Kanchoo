@@ -42,14 +42,18 @@ function publicRoom(room) {
 }
 
 function broadcastRoom(room) {
-    const message = JSON.stringify({
-        type: "room_state",
-        room: publicRoom(room)
-    });
+    const roomData = publicRoom(room);
 
     for (const socket of room.sockets) {
         if (socket.readyState === WebSocket.OPEN) {
-            socket.send(message);
+            socket.send(
+                JSON.stringify({
+                    type: "room_state",
+                    room: roomData,
+                    yourPlayerNumber:
+                        socket.playerNumber
+                })
+            );
         }
     }
 }
