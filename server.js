@@ -147,17 +147,9 @@ function handleMessage(socket, message) {
         if (playerIndex !== -1) {
             socket.playerNumber = playerIndex + 1;
 
-            const player = room.battlePlayers[playerIndex];
-            const isExistingPlayer = player.name === name;
-
-            player.name = name;
-
-            // バトル画面からの再接続では、ROOMで確定したpartyを保持する。
-            // 新規プレイヤーだけ初期化する。
-            if (!isExistingPlayer) {
-                player.ready = false;
-                player.party = [];
-            }
+            room.battlePlayers[playerIndex].name = name;
+            room.battlePlayers[playerIndex].ready = false;
+            room.battlePlayers[playerIndex].party = [];
         } else {
             // 3人目以降は観戦者
             socket.playerNumber = 0;
