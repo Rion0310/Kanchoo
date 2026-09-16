@@ -49,7 +49,7 @@ function broadcastRoom(room) {
             send(socket, {
                 type: "room_state",
                 room: roomData,
-                yourPlayerNumber: socket.playerNumber
+                yourPlayerNumber: socket.playerNumber//
             });
         }
     }
