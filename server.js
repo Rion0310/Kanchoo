@@ -195,16 +195,24 @@ function handleMessage(socket, message) {
             }
 
             if (index !== -1) {
-                room.battlePlayers[index].name = socket.playerName;
-                room.battlePlayers[index].ready = false;
+                const player = room.battlePlayers[index];
+                const isExistingPlayer = player.name === socket.playerName;
+
+                player.name = socket.playerName;
                 socket.playerNumber = index + 1;
 
                 /*
-                 * [PARTY FIX 2: battle接続ではpartyを変更しない]
+                 * BATTLE画面からの再接続では、ROOMで確定した
+                 * ready / party を絶対に消さない。
                  *
-                 * partyの確定はROOMのroom_readyで行います。
-                 * battle画面から送られてくるpartyで上書きしません。
+                 * ここでready=falseにすると、room_readyで両者READY済みでも
+                 * battle_join時のsendBattleStart()が成立せず、
+                 * battle_startが送信されない。
                  */
+                if (!isExistingPlayer) {
+                    player.ready = false;
+                    player.party = [];
+                }
             }
 
             room.spectators.delete(socket);
