@@ -1,433 +1,575 @@
 (() => {
-"use strict";
+    "use strict";
 
-const ROOM_STORAGE_KEY = "monsterWarRoom";
-const PLAYER_NAME_STORAGE_KEY = "monsterWarPlayerName";
+    const PLAYER_NAME_STORAGE_KEY =
+        "monsterWarPlayerName";
 
-const params = new URLSearchParams(window.location.search);
-const requestedRoomId =
-    "CHINKO";
+    const FIXED_ROOM_ID =
+        "MONSTER_WAR";
 
-const playerName =
-    localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "PLAYER";
+    const playerName =
+        (
+            localStorage.getItem(
+                PLAYER_NAME_STORAGE_KEY
+            ) ||
+            "PLAYER"
+        )
+            .trim()
+            .slice(0, 12) ||
+        "PLAYER";
 
-const playerNameDisplay =
-    document.getElementById("player-name-display");
-
-const roomIdDisplay =
-    document.getElementById("room-id-display");
-
-const selectedTableDisplay =
-    document.getElementById("selected-table");
-
-const connectionStatus =
-    document.getElementById("connection-status");
-
-const battleTable =
-    document.getElementById("battle-table");
-
-const spectatorTable =
-    document.getElementById("spectator-table");
-
-const readyButton =
-    document.getElementById("ready-button");
-
-const backButton =
-    document.getElementById("back-button");
-
-const battlePlayer1 =
-    document.getElementById("battle-player-1");
-
-const battlePlayer2 =
-    document.getElementById("battle-player-2");
-
-const battleReady1 =
-    document.getElementById("battle-ready-1");
-
-const battleReady2 =
-    document.getElementById("battle-ready-2");
-
-let socket = null;
-let roomState = {
-    roomId: requestedRoomId || createRoomId(),
-    battlePlayers: [
-        { name: "", ready: false },
-        { name: "", ready: false }
-    ],
-    spectators: [],
-    battleStarted: false
-};
-let selectedTable = null;
-let myPlayerNumber = 0;
-let battleStartedHandled = false;
-
-function createRoomId() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let result = "";
-
-    for (let i = 0; i < 6; i++) {
-        result += chars[Math.floor(Math.random() * chars.length)];
-    }
-
-    return result;
-}
-
-function getParty() {
-    try {
-        const party =
-            JSON.parse(
-                localStorage.getItem("monsterWarParty") || "[]"
-            );
-
-        if (Array.isArray(party)) {
-            return party
-                .map(Number)
-                .filter(Number.isFinite)
-                .slice(0, 6);
-        }
-    } catch (error) {
-        console.warn("パーティの読み込みに失敗しました。", error);
-    }
-
-    return [];
-}
-
-function setConnectionStatus(text, connected = false) {
-    if (!connectionStatus) return;
-
-    connectionStatus.textContent = text;
-    connectionStatus.classList.toggle("connected", connected);
-}
-
-function saveRoom() {
-    localStorage.setItem(
-        ROOM_STORAGE_KEY,
-        JSON.stringify(roomState)
-    );
-}
-
-function renderRoom() {
-    if (playerNameDisplay) {
-        playerNameDisplay.textContent = playerName;
-    }
-
-    if (roomIdDisplay) {
-        roomIdDisplay.textContent = roomState.roomId;
-    }
-
-    const players =
-        roomState.battlePlayers || [
-            { name: "", ready: false },
-            { name: "", ready: false }
-        ];
-
-    if (battlePlayer1) {
-        battlePlayer1.textContent =
-            players[0]?.name || "WAITING";
-    }
-
-    if (battlePlayer2) {
-        battlePlayer2.textContent =
-            players[1]?.name || "WAITING";
-    }
-
-    if (battleReady1) {
-        battleReady1.textContent =
-            players[0]?.ready ? "READY" : "WAITING";
-        battleReady1.classList.toggle(
-            "ready",
-            !!players[0]?.ready
+    const playerNameDisplay =
+        document.getElementById(
+            "player-name-display"
         );
-    }
 
-    if (battleReady2) {
-        battleReady2.textContent =
-            players[1]?.ready ? "READY" : "WAITING";
-        battleReady2.classList.toggle(
-            "ready",
-            !!players[1]?.ready
+    const roomIdDisplay =
+        document.getElementById(
+            "room-id-display"
         );
-    }
 
-    if (selectedTableDisplay) {
-        selectedTableDisplay.textContent =
-            selectedTable === "battle"
-                ? "対戦卓"
-                : selectedTable === "spectator"
-                    ? "観戦卓"
-                    : "卓を選択してください";
-    }
-
-    battleTable?.classList.toggle(
-        "active",
-        selectedTable === "battle"
-    );
-
-    spectatorTable?.classList.toggle(
-        "active",
-        selectedTable === "spectator"
-    );
-
-    if (readyButton) {
-        const isBattlePlayer =
-            myPlayerNumber === 1 ||
-            myPlayerNumber === 2;
-
-        const currentReady =
-            isBattlePlayer &&
-            !!players[myPlayerNumber - 1]?.ready;
-
-        readyButton.disabled = !isBattlePlayer;
-
-        const label =
-            readyButton.querySelector(".button-label");
-
-        if (label) {
-            label.textContent =
-                currentReady ? "解除" : "準備";
-        }
-
-        readyButton.classList.toggle(
-            "ready",
-            currentReady
+    const selectedTableDisplay =
+        document.getElementById(
+            "selected-table"
         );
-    }
-}
 
-function connect() {
-    const protocol =
-        location.protocol === "https:"
-            ? "wss:"
-            : "ws:";
+    const connectionStatus =
+        document.getElementById(
+            "connection-status"
+        );
 
-    const host =
-        location.host || "localhost:8080";
+    const battleTable =
+        document.getElementById(
+            "battle-table"
+        );
 
-    const url =
-        `${protocol}//${host}`;
+    const spectatorTable =
+        document.getElementById(
+            "spectator-table"
+        );
 
-    setConnectionStatus("CONNECTING...");
+    const readyButton =
+        document.getElementById(
+            "ready-button"
+        );
 
-    try {
-        socket = new WebSocket(url);
-    } catch (error) {
-        setConnectionStatus("CONNECTION ERROR");
-        console.error(error);
-        return;
-    }
+    const backButton =
+        document.getElementById(
+            "back-button"
+        );
 
-    socket.addEventListener("open", () => {
-        setConnectionStatus("ONLINE", true);
+    const battlePlayer1 =
+        document.getElementById(
+            "battle-player-1"
+        );
 
-        send({
-            type: "room_join",
-            roomId: roomState.roomId,
-            playerName
-        });
-    });
+    const battlePlayer2 =
+        document.getElementById(
+            "battle-player-2"
+        );
 
-    socket.addEventListener("message", event => {
-        let message;
+    const battleReady1 =
+        document.getElementById(
+            "battle-ready-1"
+        );
 
+    const battleReady2 =
+        document.getElementById(
+            "battle-ready-2"
+        );
+
+    let socket = null;
+
+    let myPlayerNumber = 0;
+
+    let battleStartedHandled =
+        false;
+
+    let roomState = {
+        roomId:
+            FIXED_ROOM_ID,
+
+        battlePlayers: [
+            {
+                name: "",
+                ready: false
+            },
+            {
+                name: "",
+                ready: false
+            }
+        ],
+
+        spectators: [],
+
+        battleStarted:
+            false
+    };
+
+    function getParty() {
         try {
-            message = JSON.parse(event.data);
-        } catch {
+            const party =
+                JSON.parse(
+                    localStorage.getItem(
+                        "monsterWarParty"
+                    ) ||
+                    "[]"
+                );
+
+            if (
+                Array.isArray(
+                    party
+                )
+            ) {
+                return party
+                    .map(Number)
+                    .filter(
+                        Number.isFinite
+                    )
+                    .slice(0, 6);
+            }
+        } catch (error) {
+            console.warn(
+                "パーティの読み込みに失敗しました。",
+                error
+            );
+        }
+
+        return [];
+    }
+
+    function setConnectionStatus(
+        text,
+        connected = false
+    ) {
+        if (
+            !connectionStatus
+        ) {
             return;
         }
 
-        handleServerMessage(message);
-    });
+        connectionStatus.textContent =
+            text;
 
-    socket.addEventListener("close", () => {
-        setConnectionStatus("OFFLINE");
-    });
-
-    socket.addEventListener("error", () => {
-        setConnectionStatus("CONNECTION ERROR");
-    });
-}
-
-function send(payload) {
-    if (
-        !socket ||
-        socket.readyState !== WebSocket.OPEN
-    ) {
-        return false;
+        connectionStatus.classList.toggle(
+            "connected",
+            connected
+        );
     }
 
-    socket.send(JSON.stringify(payload));
-    return true;
-}
+    function renderRoom() {
+        if (
+            playerNameDisplay
+        ) {
+            playerNameDisplay.textContent =
+                playerName;
+        }
 
-function handleServerMessage(message) {
-    switch (message.type) {
-        case "room_connected":
-            roomState.roomId =
-                message.roomId || roomState.roomId;
+        if (
+            roomIdDisplay
+        ) {
+            roomIdDisplay.textContent =
+                FIXED_ROOM_ID;
+        }
 
-            saveRoom();
-            renderRoom();
-            break;
+        const players =
+            roomState.battlePlayers ||
+            [
+                {
+                    name: "",
+                    ready: false
+                },
+                {
+                    name: "",
+                    ready: false
+                }
+            ];
 
-        case "room_state":
-            roomState =
-                message.room || roomState;
+        if (
+            battlePlayer1
+        ) {
+            battlePlayer1.textContent =
+                players[0]?.name ||
+                "WAITING";
+        }
 
-            myPlayerNumber =
-                roomState.battlePlayers.findIndex(
-                    player =>
-                        player.name === playerName
-                ) + 1;
+        if (
+            battlePlayer2
+        ) {
+            battlePlayer2.textContent =
+                players[1]?.name ||
+                "WAITING";
+        }
 
+        if (
+            battleReady1
+        ) {
+            battleReady1.textContent =
+                players[0]?.ready
+                    ? "READY"
+                    : "WAITING";
+
+            battleReady1.classList.toggle(
+                "ready",
+                !!players[0]?.ready
+            );
+        }
+
+        if (
+            battleReady2
+        ) {
+            battleReady2.textContent =
+                players[1]?.ready
+                    ? "READY"
+                    : "WAITING";
+
+            battleReady2.classList.toggle(
+                "ready",
+                !!players[1]?.ready
+            );
+        }
+
+        if (
+            selectedTableDisplay
+        ) {
             if (
-                myPlayerNumber !== 1 &&
-                myPlayerNumber !== 2
+                myPlayerNumber === 1 ||
+                myPlayerNumber === 2
             ) {
-                myPlayerNumber = 0;
+                selectedTableDisplay.textContent =
+                    "対戦卓";
+            } else {
+                selectedTableDisplay.textContent =
+                    "観戦";
             }
+        }
 
-            if (
-                myPlayerNumber > 0
-            ) {
-                selectedTable = "battle";
-            }
+        if (
+            battleTable
+        ) {
+            battleTable.classList.toggle(
+                "active",
+                myPlayerNumber === 1 ||
+                myPlayerNumber === 2
+            );
+        }
 
-            saveRoom();
-            renderRoom();
-            break;
+        if (
+            spectatorTable
+        ) {
+            spectatorTable.classList.toggle(
+                "active",
+                myPlayerNumber === 0
+            );
+        }
 
-        case "battle_start":
-            if (battleStartedHandled) {
-                return;
-            }
+        if (
+            readyButton
+        ) {
+            const isPlayer =
+                myPlayerNumber === 1 ||
+                myPlayerNumber === 2;
 
-            battleStartedHandled = true;
+            const ready =
+                isPlayer &&
+                !!players[
+                    myPlayerNumber - 1
+                ]?.ready;
 
-            const myPlayer =
-                message.players?.find(
-                    player =>
-                        player.name === playerName
-                )?.player || myPlayerNumber;
+            readyButton.disabled =
+                !isPlayer;
 
-            const roomId =
-                message.roomId || roomState.roomId;
-
-            window.location.href =
-                `../battle/battle.html?room=${encodeURIComponent(roomId)}&player=${myPlayer}&name=${encodeURIComponent(playerName)}`;
-
-            break;
-    }
-}
-
-function selectTable(table) {
-    selectedTable = table;
-
-    if (table === "battle") {
-        send({
-            type: "room_select_table",
-            table: "battle",
-            party: getParty()
-        });
-    } else {
-        send({
-            type: "room_select_table",
-            table: "spectator"
-        });
-    }
-
-    renderRoom();
-}
-
-function toggleReady() {
-    if (
-        myPlayerNumber !== 1 &&
-        myPlayerNumber !== 2
-    ) {
-        return;
-    }
-
-    const current =
-        !!roomState.battlePlayers[
-            myPlayerNumber - 1
-        ]?.ready;
-
-    send({
-        type: "room_ready",
-        ready: !current,
-        party: getParty()
-    });
-}
-
-battleTable?.addEventListener(
-    "click",
-    () => selectTable("battle")
-);
-
-spectatorTable?.addEventListener(
-    "click",
-    () => selectTable("spectator")
-);
-
-readyButton?.addEventListener(
-    "click",
-    toggleReady
-);
-
-backButton?.addEventListener(
-    "click",
-    () => {
-        window.location.href =
-            "../title/title.html";
-    }
-);
-
-if (roomIdDisplay) {
-    roomIdDisplay.title =
-        "クリックでルームIDをコピー";
-
-    roomIdDisplay.addEventListener(
-        "click",
-        async () => {
-            try {
-                const shareUrl =
-                    new URL(window.location.href);
-
-                shareUrl.searchParams.set(
-                    "room",
-                    roomState.roomId
+            const label =
+                readyButton.querySelector(
+                    ".button-label"
                 );
 
-                await navigator.clipboard.writeText(
-                    shareUrl.href
-                );
+            if (label) {
+                label.textContent =
+                    ready
+                        ? "解除"
+                        : "準備";
+            }
 
+            readyButton.classList.toggle(
+                "ready",
+                ready
+            );
+        }
+    }
+
+    function send(
+        payload
+    ) {
+        if (
+            !socket ||
+            socket.readyState !==
+                WebSocket.OPEN
+        ) {
+            return false;
+        }
+
+        socket.send(
+            JSON.stringify(
+                payload
+            )
+        );
+
+        return true;
+    }
+
+    function connect() {
+        const protocol =
+            location.protocol ===
+            "https:"
+                ? "wss:"
+                : "ws:";
+
+        const host =
+            location.host ||
+            "localhost:8080";
+
+        setConnectionStatus(
+            "CONNECTING..."
+        );
+
+        try {
+            socket =
+                new WebSocket(
+                    `${protocol}//${host}`
+                );
+        } catch (error) {
+            setConnectionStatus(
+                "CONNECTION ERROR"
+            );
+
+            console.error(
+                error
+            );
+
+            return;
+        }
+
+        socket.addEventListener(
+            "open",
+            () => {
                 setConnectionStatus(
-                    "ROOM LINK COPIED",
+                    "ONLINE",
                     true
                 );
 
-                setTimeout(
-                    () => {
-                        if (
-                            socket?.readyState ===
-                            WebSocket.OPEN
-                        ) {
-                            setConnectionStatus(
-                                "ONLINE",
-                                true
-                            );
-                        }
-                    },
-                    1200
+                /*
+                 * ルームIDは送るが、
+                 * サーバー側でも必ず
+                 * MONSTER_WARに固定する。
+                 */
+                send({
+                    type:
+                        "room_join",
+
+                    roomId:
+                        FIXED_ROOM_ID,
+
+                    playerName
+                });
+            }
+        );
+
+        socket.addEventListener(
+            "message",
+            event => {
+                let message;
+
+                try {
+                    message =
+                        JSON.parse(
+                            event.data
+                        );
+                } catch {
+                    return;
+                }
+
+                handleServerMessage(
+                    message
                 );
-            } catch {
-                // Clipboard APIが使えない環境では何もしない
+            }
+        );
+
+        socket.addEventListener(
+            "close",
+            () => {
+                setConnectionStatus(
+                    "OFFLINE"
+                );
+            }
+        );
+
+        socket.addEventListener(
+            "error",
+            error => {
+                console.error(
+                    "WebSocket error:",
+                    error
+                );
+
+                setConnectionStatus(
+                    "CONNECTION ERROR"
+                );
+            }
+        );
+    }
+
+    function handleServerMessage(
+        message
+    ) {
+        switch (
+            message.type
+        ) {
+            case "room_connected": {
+                myPlayerNumber =
+                    Number(
+                        message.playerNumber
+                    ) || 0;
+
+                roomState.roomId =
+                    FIXED_ROOM_ID;
+
+                renderRoom();
+
+                break;
+            }
+
+            case "room_state": {
+                roomState =
+                    message.room ||
+                    roomState;
+
+                /*
+                 * サーバーから
+                 * 自分のPLAYER番号を受け取る。
+                 */
+                myPlayerNumber =
+                    Number(
+                        message.yourPlayerNumber
+                    ) || 0;
+
+                /*
+                 * 1・2なら対戦プレイヤー。
+                 * 0なら観戦者。
+                 */
+                renderRoom();
+
+                break;
+            }
+
+            case "battle_start": {
+                if (
+                    battleStartedHandled
+                ) {
+                    return;
+                }
+
+                battleStartedHandled =
+                    true;
+
+                const myPlayer =
+                    message.players?.find(
+                        player =>
+                            player.name ===
+                            playerName
+                    )?.player ||
+                    myPlayerNumber;
+
+                window.location.href =
+                    `../battle/battle.html?room=${encodeURIComponent(
+                        FIXED_ROOM_ID
+                    )}&player=${myPlayer}&name=${encodeURIComponent(
+                        playerName
+                    )}`;
+
+                break;
             }
         }
-    );
-}
+    }
 
-renderRoom();
-connect();
+    function toggleReady() {
+        if (
+            myPlayerNumber !== 1 &&
+            myPlayerNumber !== 2
+        ) {
+            return;
+        }
+
+        const index =
+            myPlayerNumber - 1;
+
+        const currentReady =
+            !!roomState
+                .battlePlayers?.[
+                index
+            ]?.ready;
+
+        send({
+            type:
+                "room_ready",
+
+            ready:
+                !currentReady,
+
+            party:
+                getParty()
+        });
+    }
+
+    /*
+     * 卓選択は不要。
+     * 1・2番なら自動的に対戦卓。
+     * 3人目以降は自動的に観戦。
+     */
+
+    battleTable?.addEventListener(
+        "click",
+        () => {
+            /*
+             * 自動参加方式なので
+             * ここでは何もしない。
+             */
+        }
+    );
+
+    spectatorTable?.addEventListener(
+        "click",
+        () => {
+            /*
+             * 自動参加方式なので
+             * ここでは何もしない。
+             */
+        }
+    );
+
+    readyButton?.addEventListener(
+        "click",
+        toggleReady
+    );
+
+    backButton?.addEventListener(
+        "click",
+        () => {
+            if (
+                socket &&
+                socket.readyState ===
+                    WebSocket.OPEN
+            ) {
+                socket.close();
+            }
+
+            window.location.href =
+                "../title/title.html";
+        }
+    );
+
+    renderRoom();
+
+    connect();
 
 })();
