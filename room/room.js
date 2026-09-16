@@ -121,8 +121,6 @@
 
     let myPlayerNumber = 0;
 
-    let myReady = false;
-
     let battleStartedHandled =
         false;
 
@@ -199,6 +197,7 @@
     }
 
     function resolveMyPlayerNumber() {
+        // サーバーから割り当てられた番号を最優先します。
         if (
             myPlayerNumber === 1 ||
             myPlayerNumber === 2
@@ -206,6 +205,8 @@
             return myPlayerNumber;
         }
 
+        // room_stateに番号が含まれない場合でも、
+        // 自分の名前からPLAYER 1/2を復元します。
         const players =
             roomState.battlePlayers || [];
 
@@ -334,12 +335,27 @@
                 myPlayerNumber === 1 ||
                 myPlayerNumber === 2;
 
+            const serverReady =
+                isPlayer &&
+                !!players[
+                    myPlayerNumber - 1
+                ]?.ready;
+
+            // 送信直後はサーバーからroom_stateが返るまで
+            // 自分のローカル状態を表示します。
             const ready =
                 isPlayer &&
-                myReady;
+                (myReady || serverReady);
+
+            // PLAYER 1/2に割り当てられたら、
+            // 常に準備ボタンを操作可能にします。
+            // 接続前だけは無効にして、接続後の再描画で有効化します。
+            const isConnected =
+                socket &&
+                socket.readyState === WebSocket.OPEN;
 
             readyButton.disabled =
-                !isPlayer;
+                !isPlayer || !isConnected;
 
             const label =
                 readyButton.querySelector(
@@ -419,6 +435,9 @@
                     "ONLINE",
                     true
                 );
+
+                // 接続直後にも描画して、準備ボタンの状態を更新します。
+                renderRoom();
 
                 /*
                  * ルームIDは送るが、
@@ -535,21 +554,6 @@
                         receivedPlayerNumber;
                 }
 
-                resolveMyPlayerNumber();
-
-                const index =
-                    myPlayerNumber - 1;
-
-                if (
-                    myPlayerNumber === 1 ||
-                    myPlayerNumber === 2
-                ) {
-                    myReady =
-                        !!roomState
-                            .battlePlayers?.[index]
-                            ?.ready;
-                }
-
                 renderRoom();
 
                 break;
@@ -605,24 +609,17 @@
         const index =
             myPlayerNumber - 1;
 
-        const targetReady = !myReady;
+        const currentReady =
+            !!roomState
+                .battlePlayers?.[
+                index
+            ]?.ready;
 
-        // 画面を先に更新し、サーバーからのroom_stateで確定します。
-        myReady = targetReady;
-        renderRoom();
-
-        const sent = send({
+        send({
             type: "room_ready",
-            ready: targetReady,
+            ready: !currentReady,
             party: getParty()
         });
-
-        if (!sent) {
-            myReady = !targetReady;
-            renderRoom();
-            setConnectionStatus("SERVER OFFLINE");
-            return;
-        }
     }
 
     /*
