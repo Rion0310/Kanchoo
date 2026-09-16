@@ -284,8 +284,25 @@ function handleMessage(socket, message) {
          */
         socket.inBattle = true;
 
+        // BATTLE画面が後から接続しても、ROOMで確定済みの
+        // P1/P2パーティを必ず直接返す。
         if (room.battleStarted) {
-            sendBattleStart(room);
+            send(socket, {
+                type: "battle_sync",
+                roomId: room.roomId,
+                players: [
+                    {
+                        player: 1,
+                        name: room.battlePlayers[0].name,
+                        party: room.battlePlayers[0].party || []
+                    },
+                    {
+                        player: 2,
+                        name: room.battlePlayers[1].name,
+                        party: room.battlePlayers[1].party || []
+                    }
+                ]
+            });
         }
 
         if (room.battleState) {

@@ -222,12 +222,10 @@ function connectOnlineBattle() {
             return;
         }
 
-        if (message.type === "battle_start") {
-            if (onlineBattleStarted) {
-                return;
-            }
-
-            const players = message.players || [];
+        if (message.type === "battle_start" || message.type === "battle_sync") {
+            const players = Array.isArray(message.players)
+                ? message.players
+                : [];
 
             const player1 = players.find(
                 player => Number(player.player) === 1
@@ -236,26 +234,39 @@ function connectOnlineBattle() {
                 player => Number(player.player) === 2
             );
 
-            /*
-             * [PARTY FIX 4: battle_startのpartyを唯一の初期値にする]
-             *
-             * サーバーのroom_readyで確定したpartyを受け取り、
-             * createUnits()より前に反映します。
-             */
+            // サーバーに保存されたP1/P2のパーティだけを使用する。
             if (Array.isArray(player1?.party)) {
-                onlineParty1 = player1.party.map(Number).filter(Number.isFinite).slice(0, 6);
+                onlineParty1 = player1.party
+                    .map(Number)
+                    .filter(Number.isFinite)
+                    .slice(0, 6);
             }
 
             if (Array.isArray(player2?.party)) {
-                onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, 6);
+                onlineParty2 = player2.party
+                    .map(Number)
+                    .filter(Number.isFinite)
+                    .slice(0, 6);
+            }
+
+            // オンラインでは両パーティが揃うまで盤面を生成しない。
+            if (
+                !Array.isArray(onlineParty1) ||
+                onlineParty1.length === 0 ||
+                !Array.isArray(onlineParty2) ||
+                onlineParty2.length === 0
+            ) {
+                console.error("オンライン対戦のP1/P2パーティ取得に失敗しました。", message);
+                return;
             }
 
             onlineBattleStarted = true;
-
             createUnits();
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
+
+            // 初期状態の送信はP1だけが担当する。
             if (MY_PLAYER_NUMBER === 1) {
                 onlineSendState();
             }
@@ -455,7 +466,7 @@ function getCharacter(id) {
 
     return characterDatabase.find(
         character =>
-            character.id === id
+            Number(character.id) === Number(id)
     );
 
 }
