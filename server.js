@@ -46,14 +46,11 @@ function broadcastRoom(room) {
 
     for (const socket of room.sockets) {
         if (socket.readyState === WebSocket.OPEN) {
-            socket.send(
-                JSON.stringify({
-                    type: "room_state",
-                    room: roomData,
-                    yourPlayerNumber:
-                        socket.playerNumber
-                })
-            );
+            send(socket, {
+                type: "room_state",
+                room: roomData,
+                yourPlayerNumber: socket.playerNumber
+            });
         }
     }
 }
@@ -64,11 +61,38 @@ function send(socket, payload) {
     }
 }
 
+function createInitialBattleState() {
+    return {
+        turn: 1, currentPlayer: 1, selectedUnitId: null, movableCells: [],
+        units: [], movedUnits: [], actionPhase: null, skillPhase: null,
+        skillDirection: null, skillTargetCells: [], skillSelectedTargetCells: [],
+        selectedSkillId: null, gameOver: false, battleLogs: [], bluffUnits: [],
+        bluffUses: {
+            1: { ketsukacchin: 2, ketsuiki: 2, dappunta: 2 },
+            2: { ketsukacchin: 2, ketsuiki: 2, dappunta: 2 }
+        }
+    };
+}
+
+function broadcastBattleState(room) {
+    if (!room.battleState) return;
+    for (const socket of room.sockets) {
+        if (socket.inBattle && socket.readyState === WebSocket.OPEN) {
+            send(socket, { type: "battle_state", state: room.battleState, sender: "server" });
+        }
+    }
+}
+
 function sendBattleStart(room) {
     if (!room.battlePlayers[0].name || !room.battlePlayers[1].name) return;
     if (!room.battlePlayers[0].ready || !room.battlePlayers[1].ready) return;
 
     room.battleStarted = true;
+
+    if (!room.battleState) {
+        room.battleState = createInitialBattleState();
+    }
+    room.expectedPlayer = Number(room.battleState.currentPlayer) || 1;
 
     const payload = {
         type: "battle_start",
@@ -95,6 +119,7 @@ function sendBattleStart(room) {
             send(socket, payload);
         }
     }
+    broadcastBattleState(room);
 }
 
 function handleMessage(socket, message) {
@@ -280,6 +305,36 @@ function handleMessage(socket, message) {
         return;
     }
 
+    if (data.type === "battle_end_turn") {
+        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) return;
+        if (!socket.inBattle) return;
+        if (!room.battleState) room.battleState = createInitialBattleState();
+
+        const sender = Number(socket.playerNumber);
+        const currentPlayer = Number(room.battleState.currentPlayer);
+        if (sender !== currentPlayer) return;
+
+        room.battleState.selectedUnitId = null;
+        room.battleState.movableCells = [];
+        room.battleState.actionPhase = null;
+        room.battleState.skillPhase = null;
+        room.battleState.skillDirection = null;
+        room.battleState.skillTargetCells = [];
+        room.battleState.skillSelectedTargetCells = [];
+        room.battleState.selectedSkillId = null;
+        room.battleState.movedUnits = [];
+
+        if (currentPlayer === 1) {
+            room.battleState.currentPlayer = 2;
+        } else {
+            room.battleState.currentPlayer = 1;
+            room.battleState.turn = Number(room.battleState.turn || 1) + 1;
+        }
+        room.expectedPlayer = room.battleState.currentPlayer;
+        broadcastBattleState(room);
+        return;
+    }
+
     if (data.type === "battle_state") {
         if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
             return;
@@ -298,6 +353,13 @@ function handleMessage(socket, message) {
             Number(socket.playerNumber);
 
         if (sender !== room.expectedPlayer) {
+            return;
+        }
+
+        if (
+            room.battleState &&
+            Number(incomingState.currentPlayer) !== Number(room.battleState.currentPlayer)
+        ) {
             return;
         }
 

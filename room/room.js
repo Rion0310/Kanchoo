@@ -465,10 +465,20 @@
             message.type
         ) {
             case "room_connected": {
-                myPlayerNumber =
+                const assignedPlayerNumber =
                     Number(
                         message.playerNumber
-                    ) || 0;
+                    );
+
+                if (
+                    assignedPlayerNumber === 1 ||
+                    assignedPlayerNumber === 2
+                ) {
+                    myPlayerNumber =
+                        assignedPlayerNumber;
+                } else {
+                    myPlayerNumber = 0;
+                }
 
                 roomState.roomId =
                     FIXED_ROOM_ID;
@@ -483,15 +493,17 @@
                     message.room ||
                     roomState;
 
-                /*
-                 * room_stateにも自分のPLAYER番号が
-                 * 含まれる場合だけ更新する。
-                 */
                 const receivedPlayerNumber =
                     Number(
                         message.yourPlayerNumber
                     );
 
+                /*
+                 * サーバーがPLAYER 1/2を割り当てた場合だけ
+                 * 自分の番号を更新する。
+                 *
+                 * これ以外のroom_stateで0に戻さない。
+                 */
                 if (
                     receivedPlayerNumber === 1 ||
                     receivedPlayerNumber === 2
@@ -500,10 +512,6 @@
                         receivedPlayerNumber;
                 }
 
-                /*
-                 * 1・2なら対戦プレイヤー。
-                 * 0なら観戦者。
-                 */
                 renderRoom();
 
                 break;
@@ -520,6 +528,11 @@
                     true;
 
                 const myPlayer =
+                    message.players?.find(
+                        player =>
+                            player.name ===
+                            playerName
+                    )?.player ||
                     myPlayerNumber;
 
                 window.location.href =
@@ -542,6 +555,13 @@
             return;
         }
 
+        if (
+            !socket ||
+            socket.readyState !== WebSocket.OPEN
+        ) {
+            return;
+        }
+
         const index =
             myPlayerNumber - 1;
 
@@ -552,14 +572,9 @@
             ]?.ready;
 
         send({
-            type:
-                "room_ready",
-
-            ready:
-                !currentReady,
-
-            party:
-                getParty()
+            type: "room_ready",
+            ready: !currentReady,
+            party: getParty()
         });
     }
 

@@ -232,7 +232,6 @@ function connectOnlineBattle() {
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
-            onlineSendState();
             return;
         }
 
@@ -3335,65 +3334,46 @@ function endTurn() {
         return;
     }
 
-    /*
-     * 行動選択中の場合は
-     * TURN ENDを押せないようにする
-     */
-
-    if (
-        battleState.actionPhase
-    ) {
-
+    if (battleState.actionPhase) {
         return;
-
     }
 
+    if (
+        ONLINE_ROOM_ID &&
+        onlineSocket &&
+        onlineSocket.readyState === WebSocket.OPEN
+    ) {
+        onlineSocket.send(JSON.stringify({
+            type: "battle_end_turn",
+            roomId: ONLINE_ROOM_ID,
+            player: MY_PLAYER_NUMBER
+        }));
+        return;
+    }
 
-    battleState.selectedUnitId =
-        null;
-
-
-    battleState.movableCells =
-        [];
-
-
-    battleState.actionPhase =
-        null;
-
-
+    battleState.selectedUnitId = null;
+    battleState.movableCells = [];
+    battleState.actionPhase = null;
+    battleState.skillPhase = null;
+    battleState.skillDirection = null;
+    battleState.skillTargetCells = [];
+    battleState.skillSelectedTargetCells = [];
+    battleState.selectedSkillId = null;
     battleState.movedUnits.clear();
-
 
     clearCellStates();
 
-
-    if (
-        battleState.currentPlayer === 1
-    ) {
-
-        battleState.currentPlayer =
-            2;
-
+    if (battleState.currentPlayer === 1) {
+        battleState.currentPlayer = 2;
     } else {
-
-        battleState.currentPlayer =
-            1;
-
+        battleState.currentPlayer = 1;
         battleState.turn++;
-
     }
 
-
     renderUnitIcons();
-
     renderPlayerPanels();
-
     updateControlPanel();
-
-    onlineSendState();
-
 }
-
 
 /* ========================================
    CONTROL PANEL
