@@ -271,35 +271,46 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "battle_join") {
-        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+        // BATTLE側は別WebSocketなので、playerNumberだけを信用せず、
+        // room_joinで登録したプレイヤー名から必ずP1/P2を再確定します。
+        const playerIndex = room.battlePlayers.findIndex(
+            player => player.name === socket.playerName
+        );
+
+        if (playerIndex === -1) {
             return;
         }
 
-        /*
-         * [PARTY FIX 3: battle_joinでもpartyを上書きしない]
-         *
-         * ROOMのroom_readyで確定したpartyをそのまま使用します。
-         * これによりP2のbattle_joinがP1のpartyを上書きする
-         * 問題を防ぎます。
-         */
+        socket.playerNumber = playerIndex + 1;
         socket.inBattle = true;
 
-        // BATTLE画面が後から接続しても、ROOMで確定済みの
-        // P1/P2パーティを必ず直接返す。
-        if (room.battleStarted) {
+        // READY時に保存したP1/P2のpartyを、BATTLE接続時に必ず返す。
+        // battleStartedのタイミングに依存しないため、画面遷移直後の
+        // 再接続でもparty同期が欠落しません。
+        const player1 = room.battlePlayers[0];
+        const player2 = room.battlePlayers[1];
+
+        if (
+            player1.name &&
+            player2.name &&
+            Array.isArray(player1.party) &&
+            player1.party.length > 0 &&
+            Array.isArray(player2.party) &&
+            player2.party.length > 0
+        ) {
             send(socket, {
                 type: "battle_sync",
                 roomId: room.roomId,
                 players: [
                     {
                         player: 1,
-                        name: room.battlePlayers[0].name,
-                        party: room.battlePlayers[0].party || []
+                        name: player1.name,
+                        party: player1.party.slice(0, 6)
                     },
                     {
                         player: 2,
-                        name: room.battlePlayers[1].name,
-                        party: room.battlePlayers[1].party || []
+                        name: player2.name,
+                        party: player2.party.slice(0, 6)
                     }
                 ]
             });

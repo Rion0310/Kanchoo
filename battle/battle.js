@@ -1025,24 +1025,23 @@ function createUnits() {
     battleState.units = [];
 
 
+    // オンライン対戦ではサーバーから受信したpartyだけを使用します。
+    // 未同期の状態でローカルpartyへフォールバックすると、P1/P2が
+    // 同じpartyに見える原因になるため、オンライン時は生成を待ちます。
+    if (ONLINE_ROOM_ID && (!Array.isArray(onlineParty1) || !Array.isArray(onlineParty2))) {
+        return;
+    }
+
     const players = [
 
         {
-            party:
-                onlineParty2 ??
-                (ONLINE_ROOM_ID ? [] : PLAYER_2_PARTY),
-
+            party: ONLINE_ROOM_ID ? onlineParty2 : PLAYER_2_PARTY,
             player: 2
-
         },
 
         {
-            party:
-                onlineParty1 ??
-                (ONLINE_ROOM_ID ? [] : PLAYER_1_PARTY),
-
+            party: ONLINE_ROOM_ID ? onlineParty1 : PLAYER_1_PARTY,
             player: 1
-
         }
 
     ];
