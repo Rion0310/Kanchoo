@@ -328,9 +328,16 @@
         if (
             readyButton
         ) {
+            // サーバー接続後、まず自分のPLAYER番号を確定する。
+            resolveMyPlayerNumber();
+
             const isPlayer =
                 myPlayerNumber === 1 ||
                 myPlayerNumber === 2;
+
+            const connected =
+                !!socket &&
+                socket.readyState === WebSocket.OPEN;
 
             const ready =
                 isPlayer &&
@@ -338,8 +345,9 @@
                     myPlayerNumber - 1
                 ]?.ready;
 
+            // PLAYER 1/2 なら、接続完了後に必ず押せる状態にする。
             readyButton.disabled =
-                !isPlayer;
+                !isPlayer || !connected;
 
             const label =
                 readyButton.querySelector(
@@ -419,6 +427,8 @@
                     "ONLINE",
                     true
                 );
+
+                renderRoom();
 
                 /*
                  * ルームIDは送るが、
@@ -533,6 +543,8 @@
                 ) {
                     myPlayerNumber =
                         receivedPlayerNumber;
+                } else {
+                    resolveMyPlayerNumber();
                 }
 
                 renderRoom();
