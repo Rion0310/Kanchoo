@@ -1,19 +1,3 @@
-
-// ===== CanChokeAcoustic BGM =====
-const canChokeAcousticBGM = new Audio("../CanChokeAcoustic.mp3");
-canChokeAcousticBGM.loop = true;
-canChokeAcousticBGM.volume = 0.15;
-
-function startCanChokeAcousticBGM() {
-    canChokeAcousticBGM.play().catch(() => {
-        // Browser autoplay policy may require the first user interaction.
-    });
-}
-
-window.addEventListener("load", startCanChokeAcousticBGM);
-document.addEventListener("pointerdown", startCanChokeAcousticBGM, { once: true });
-document.addEventListener("keydown", startCanChokeAcousticBGM, { once: true });
-
 (() => {
 
 /* ========================================
@@ -22,7 +6,7 @@ document.addEventListener("keydown", startCanChokeAcousticBGM, { once: true });
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 12;
+const BOARD_SIZE = 16;
 
 const DATA =
     window.MONSTER_WAR_DATA;
@@ -435,7 +419,7 @@ function playCharacterSong(characterId) {
 
     if (!song || !song.path) {
         characterSongAudio = new Audio("../audio/CanChoke.mp3");
-        characterSongAudio.volume = 0.15;
+        characterSongAudio.volume = 1.0;
 
         characterSongAudio.play().catch(error => {
             console.error("通常曲の再生に失敗しました。", error);
