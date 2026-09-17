@@ -54,16 +54,23 @@ const player2Status =
    ONLINE BATTLE
 ======================================== */
 
-const battleUrlParams =
-    new URLSearchParams(window.location.search);
+$1
+
+// 観戦者モード判定
+const IS_SPECTATOR =
+    battleUrlParams.get("spectator") === "true" ||
+    battleUrlParams.get("mode") === "spectator" ||
+    battleUrlParams.get("player") === "spectator";
+
 
 const ONLINE_ROOM_ID =
     battleUrlParams.get("room") || "";
 
-let MY_PLAYER_NUMBER =
-    Number(battleUrlParams.get("player")) === 2
-        ? 2
-        : 1;
+function isSpectatorMode() {
+    return IS_SPECTATOR || MY_PLAYER_NUMBER === 0;
+}
+
+let MY_PLAYER_NUMBER = IS_SPECTATOR ? 0 : (Number(battleUrlParams.get("player")) === 2 ? 2 : 1);
 
 const ONLINE_PLAYER_NAME =
     battleUrlParams.get("name") ||
@@ -3381,6 +3388,8 @@ function executeSkill(
     skill,
     targetCells
 ) {
+    if (isSpectatorMode()) return;
+
 
     if (
         ONLINE_ROOM_ID &&
@@ -3800,6 +3809,8 @@ function renderPlayerPanels() {
 ======================================== */
 
 function endTurn() {
+    if (isSpectatorMode()) return;
+
 
     if (
         ONLINE_ROOM_ID &&
