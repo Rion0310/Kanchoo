@@ -54,8 +54,10 @@ function resetBattleRoom(room) {
         socket.inBattle = false;
 
         if (socket.playerNumber === 1 || socket.playerNumber === 2) {
+            // 試合終了後は卓から完全に解放します。
+            // 勝者・敗者を観戦卓へ自動移動させない。
             socket.playerNumber = 0;
-            room.spectators.add(socket);
+            socket.table = null;
         }
     }
 
@@ -183,33 +185,24 @@ function handleMessage(socket, message) {
             .trim()
             .slice(0, 30) || "PLAYER";
 
-        // 既にROOMでPLAYER枠を取得している名前なら、
-        // BATTLE側の新しいWebSocketでも同じPLAYER枠を復元する。
-        // 既存のparty / readyは絶対に初期化しない。
-        let playerIndex = room.battlePlayers.findIndex(
-            player => player.name === name
-        );
+        // ROOMへ入っただけでは卓に自動アサインしません。
+        // PLAYER枠の復元が必要なのはBATTLEからの再接続だけです。
+        let playerIndex = -1;
 
-        // 新規参加者の場合だけ空いている枠を割り当てる。
-        if (playerIndex === -1) {
+        if (data.reconnectBattle === true) {
             playerIndex = room.battlePlayers.findIndex(
-                player => !player.name
+                player => player.name === name
             );
         }
 
         socket.room = room;
         socket.playerName = name;
-        socket.playerNumber = playerIndex !== -1 ? playerIndex + 1 : 0;
-        socket.table = playerIndex !== -1 ? `battle${playerIndex + 1}` : null;
-
-        // ROOMへ入っただけでは卓に自動アサインしません。
-        // 既存PLAYERのBATTLE再接続だけは、名前から元の卓を復元します。
-        if (playerIndex !== -1) {
-            socket.playerNumber = playerIndex + 1;
-        } else {
-            socket.playerNumber = 0;
-            socket.table = null;
-        }
+        socket.playerNumber =
+            playerIndex !== -1 ? playerIndex + 1 : 0;
+        socket.table =
+            playerIndex !== -1
+                ? `battle${playerIndex + 1}`
+                : null;
 
         room.sockets.add(socket);
 
@@ -268,6 +261,30 @@ function handleMessage(socket, message) {
                 message: "指定された対戦卓が見つかりません。"
             });
             return;
+        }
+
+        // 現在の卓から別の卓へ移動する場合は、
+        // 先に自分が占有していたPLAYER枠を解放します。
+        if (
+            socket.playerNumber === 1 ||
+            socket.playerNumber === 2
+        ) {
+            const currentIndex = socket.playerNumber - 1;
+
+            if (currentIndex !== requestedIndex) {
+                const currentPlayer =
+                    room.battlePlayers[currentIndex];
+
+                if (
+                    currentPlayer &&
+                    currentPlayer.name === socket.playerName &&
+                    !room.battleStarted
+                ) {
+                    currentPlayer.name = "";
+                    currentPlayer.ready = false;
+                    currentPlayer.party = [];
+                }
+            }
         }
 
         const player = room.battlePlayers[requestedIndex];

@@ -276,7 +276,8 @@ function connectOnlineBattle() {
         onlineSocket.send(JSON.stringify({
             type: "room_join",
             roomId: ONLINE_ROOM_ID,
-            playerName: ONLINE_PLAYER_NAME
+            playerName: ONLINE_PLAYER_NAME,
+            reconnectBattle: true
         }));
     });
 
