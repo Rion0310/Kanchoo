@@ -158,7 +158,7 @@ function getTitleParty() {
 
     const savedParty =
         localStorage.getItem(
-            "monsterWarParty"
+            window.MONSTER_WAR_CONSTANTS.STORAGE_KEYS.PARTY
         );
 
 
@@ -348,7 +348,7 @@ function openBattle() {
 function openParty() {
 
     window.location.href =
-        "../build/index.html";
+        "../party/index.html";
 
 }
 

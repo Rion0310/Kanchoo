@@ -10,10 +10,11 @@ Node.js + WebSocket (`ws`) でオンライン対戦サーバーを動かしま�
 kanchoo/
 ├─ server.js
 ├─ package.json
+├─ shared/
 ├─ title/
 ├─ room/
 ├─ battle/
-├─ build/
+├─ party/
 ├─ database/
 ├─ images/
 └─ audio/

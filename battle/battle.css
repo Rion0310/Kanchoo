@@ -1610,6 +1610,16 @@ body {
     border-color: #91804b;
 }
 
+#undo-move-action-button {
+    border-color: #6b2f2f;
+    background: #1d1616;
+}
+
+#undo-move-action-button:hover {
+    background: #2b1d1d;
+    border-color: #b85252;
+}
+
 
 /* ========================================
    SKILL SELECT

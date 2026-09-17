@@ -5,7 +5,7 @@
 
 if (!window.MONSTER_WAR_DATA) {
     throw new Error(
-        "MONSTER_WAR_DATA が読み込まれていません。build/index.html で ../database/game-data.js を script.js より先に読み込んでください。"
+        "MONSTER_WAR_DATA が読み込まれていません。party/index.html で ../database/game-data.js を script.js より先に読み込んでください。"
     );
 }
 
@@ -17,31 +17,12 @@ const {
 
 
 // ========================================
-// 技取得
+// 技取得・キャラクターの技取得
 // ========================================
-
-function getSkill(id) {
-    return skillDatabase.find(
-        skill => skill.id === id
-    );
-}
-
-
-// ========================================
-// キャラクターの技取得
-// ========================================
-
-function getCharacterSkills(characterId) {
-
-    const skillIds =
-        characterSkillsDatabase[characterId] || [];
-
-    return skillIds
-        .map(id => getSkill(id))
-        .filter(Boolean);
-
-}
-
+//
+// [重複解消] getSkill / getCharacterSkills は
+// database/game-data.js に共通実装があるため、
+// ここでは再定義しません。
 
 // ========================================
 // パーティ状態
@@ -60,7 +41,7 @@ function loadSavedParty() {
 
     const savedParty =
         localStorage.getItem(
-            "monsterWarParty"
+            window.MONSTER_WAR_CONSTANTS.STORAGE_KEYS.PARTY
         );
 
     if (!savedParty) {
@@ -89,7 +70,7 @@ function loadSavedParty() {
                 );
 
             })
-            .slice(0, 6);
+            .slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
 
     }
     catch (error) {
@@ -986,7 +967,7 @@ function confirmParty() {
     // ========================================
 
     localStorage.setItem(
-        "monsterWarParty",
+        window.MONSTER_WAR_CONSTANTS.STORAGE_KEYS.PARTY,
         JSON.stringify(
             party
         )

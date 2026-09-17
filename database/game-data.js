@@ -393,6 +393,39 @@ characterDatabase.forEach(character => {
         character.defense;
 });
 
+/*
+ * ========================================
+ * 共通ヘルパー関数
+ * ========================================
+ *
+ * [重複解消]
+ * 以前は getCharacter / getSkill / getCharacterSkills が
+ * party/script.js と battle/battle.js の両方に
+ * ほぼ同じ内容でコピペされており、しかも getSkill だけ
+ * id の型変換(Number())の有無が食い違っていました。
+ * データと一緒に定義しておくことで、今後は1箇所を直せば
+ * 全画面に反映されます。
+ */
+function getCharacter(id) {
+    return characterDatabase.find(
+        character => character.id === Number(id)
+    );
+}
+
+function getSkill(id) {
+    return skillDatabase.find(
+        skill => skill.id === Number(id)
+    );
+}
+
+function getCharacterSkills(characterId) {
+    const skillIds = characterSkillsDatabase[characterId] || [];
+
+    return skillIds
+        .map(id => getSkill(id))
+        .filter(Boolean);
+}
+
 
 window.MONSTER_WAR_DATA = {
 

@@ -73,6 +73,42 @@ const ONLINE_PLAYER_NAME =
     battleUrlParams.get("name") ||
     (IS_SPECTATOR ? "SPECTATOR" : `PLAYER${MY_PLAYER_NUMBER}`);
 
+/*
+ * [IDENTITY FIX]
+ * ROOM側で発行済みのsessionIdをURL経由で引き継ぎます。
+ * これにより、名前が他人と重複していてもサーバー側で
+ * 正しい本人の対戦卓に復元できます。
+ * URLに無い場合（直接battle.htmlを開いた等）はこの場で発行します。
+ */
+function generateSessionId() {
+    if (
+        window.crypto &&
+        typeof window.crypto.randomUUID === "function"
+    ) {
+        try {
+            return window.crypto.randomUUID();
+        } catch (error) {
+            // フォールバックへ続行
+        }
+    }
+
+    return (
+        "sid-" +
+        Date.now().toString(36) +
+        "-" +
+        Math.random().toString(36).slice(2, 12)
+    );
+}
+
+const SESSION_ID_STORAGE_KEY = window.MONSTER_WAR_CONSTANTS.STORAGE_KEYS.SESSION_ID;
+
+let ONLINE_SESSION_ID =
+    battleUrlParams.get("session") ||
+    sessionStorage.getItem(SESSION_ID_STORAGE_KEY) ||
+    generateSessionId();
+
+sessionStorage.setItem(SESSION_ID_STORAGE_KEY, ONLINE_SESSION_ID);
+
 function isSpectatorMode() {
     return IS_SPECTATOR || MY_PLAYER_NUMBER === 0;
 }
@@ -277,7 +313,8 @@ function connectOnlineBattle() {
             type: "room_join",
             roomId: ONLINE_ROOM_ID,
             playerName: ONLINE_PLAYER_NAME,
-            reconnectBattle: true
+            reconnectBattle: true,
+            sessionId: ONLINE_SESSION_ID
         }));
     });
 
@@ -291,6 +328,18 @@ function connectOnlineBattle() {
         }
 
         if (message.type === "room_connected") {
+            if (
+                typeof message.sessionId === "string" &&
+                message.sessionId
+            ) {
+                ONLINE_SESSION_ID = message.sessionId;
+
+                sessionStorage.setItem(
+                    SESSION_ID_STORAGE_KEY,
+                    ONLINE_SESSION_ID
+                );
+            }
+
             const assignedPlayerNumber = Number(message.playerNumber);
 
             if (assignedPlayerNumber === 1 || assignedPlayerNumber === 2) {
@@ -346,11 +395,11 @@ function connectOnlineBattle() {
              * createUnits()より前に反映します。
              */
             if (Array.isArray(player1?.party)) {
-                onlineParty1 = player1.party.map(Number).filter(Number.isFinite).slice(0, 6);
+                onlineParty1 = player1.party.map(Number).filter(Number.isFinite).slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
             }
 
             if (Array.isArray(player2?.party)) {
-                onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, 6);
+                onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
             }
 
             onlinePlayerNames = {
@@ -684,6 +733,14 @@ const battleState = {
 
     actionPhase: null,
 
+    // [MOVE UNDO]
+    // actionPhase中のユニットが「移動前にいたマス」を覚えておくための領域。
+    // 行動(技/待機/ブラフ)を選ぶ前に「移動をやり直す」を押したとき、
+    // ここへ戻す。行動を確定した後はfinishUnitAction()でnullに戻す。
+    actionOriginRow: null,
+
+    actionOriginColumn: null,
+
     skillPhase: null,
 
     skillDirection: null,
@@ -722,40 +779,10 @@ const battleState = {
 /* ========================================
    DATABASE
 ======================================== */
-
-function getCharacter(id) {
-
-    return characterDatabase.find(
-        character =>
-            character.id === id
-    );
-
-}
-
-
-function getSkill(id) {
-
-    return skillDatabase.find(
-        skill =>
-            skill.id === Number(id)
-    );
-
-}
-
-
-function getCharacterSkills(
-    characterId
-) {
-
-    return (
-        characterSkillsDatabase[
-            characterId
-        ] || []
-    )
-        .map(id => getSkill(id))
-        .filter(Boolean);
-
-}
+//
+// [重複解消] getCharacter / getSkill / getCharacterSkills は
+// database/game-data.js に共通実装があるため、
+// ここでは再定義しません（party/script.js と重複していました）。
 
 
 /* ========================================
@@ -769,7 +796,7 @@ function loadPlayer1Party() {
         const saved =
             JSON.parse(
                 localStorage.getItem(
-                    "monsterWarParty"
+                    window.MONSTER_WAR_CONSTANTS.STORAGE_KEYS.PARTY
                 ) || "[]"
             );
 
@@ -782,7 +809,7 @@ function loadPlayer1Party() {
                         id =>
                             getCharacter(id)
                     )
-                    .slice(0, 6);
+                    .slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
 
 
             if (party.length > 0) {
@@ -2070,6 +2097,14 @@ function moveUnit(
         return;
     }
 
+    // [MOVE UNDO]
+    // 上書きする前に、移動前の位置を覚えておく。
+    battleState.actionOriginRow =
+        unit.row;
+
+    battleState.actionOriginColumn =
+        unit.column;
+
     unit.row =
         row;
 
@@ -2156,6 +2191,8 @@ function areAllCurrentPlayerUnitsActed() {
 function finishUnitAction() {
 
     battleState.actionPhase = null;
+    battleState.actionOriginRow = null;
+    battleState.actionOriginColumn = null;
     battleState.skillPhase = null;
     battleState.skillDirection = null;
     battleState.skillTargetCells = [];
@@ -2184,6 +2221,74 @@ function finishUnitAction() {
 /* ========================================
    WAIT
 ======================================== */
+
+/* ========================================
+   UNDO MOVE
+======================================== */
+
+function undoMove() {
+    if (isSpectatorMode()) return;
+
+    if (
+        ONLINE_ROOM_ID &&
+        battleState.currentPlayer !== MY_PLAYER_NUMBER
+    ) {
+        return;
+    }
+
+    const unit =
+        getUnit(
+            battleState.actionPhase
+        );
+
+    if (
+        !unit ||
+        unit.player !== battleState.currentPlayer
+    ) {
+        return;
+    }
+
+    if (
+        battleState.actionOriginRow === null ||
+        battleState.actionOriginColumn === null
+    ) {
+        // 移動前の位置が記録されていない場合は何もしない
+        // （待機の直後にブラウザバックした等の想定外の状態を保護）。
+        return;
+    }
+
+    addBattleLog(`${unit.name}は移動をやり直した。`);
+
+    // 移動前の位置へ戻す
+    unit.row = battleState.actionOriginRow;
+    unit.column = battleState.actionOriginColumn;
+
+    battleState.movedUnits.delete(unit.unitId);
+    battleState.actionPhase = null;
+    battleState.actionOriginRow = null;
+    battleState.actionOriginColumn = null;
+
+    // そのまま同じユニットを選択した状態に戻し、
+    // 移動先を選び直せるようにする。
+    battleState.selectedUnitId = unit.unitId;
+    battleState.movableCells = getMovableCells(unit);
+
+    clearCellStates();
+
+    const selectedCell = getCell(unit.row, unit.column);
+    selectedCell?.classList.add("selected");
+
+    battleState.movableCells.forEach(({ row, column }) => {
+        getCell(row, column)?.classList.add("movable");
+    });
+
+    renderUnitIcons();
+    renderPlayerPanels();
+    updateControlPanel();
+
+    // 相手にも「移動をやり直した」後の盤面を同期する。
+    onlineSendState();
+}
 
 function waitUnit() {
     if (isSpectatorMode()) return;
@@ -3985,6 +4090,14 @@ function updateControlPanel() {
                     ブラフを<br>仕込んで待機
                 </button>
 
+
+                <button
+                    type="button"
+                    id="undo-move-action-button"
+                >
+                    移動をやり直す
+                </button>
+
             </div>
 
         `;
@@ -4017,6 +4130,16 @@ function updateControlPanel() {
             ?.addEventListener(
                 "click",
                 bluffUnit
+            );
+
+
+        panel
+            .querySelector(
+                "#undo-move-action-button"
+            )
+            ?.addEventListener(
+                "click",
+                undoMove
             );
 
 
