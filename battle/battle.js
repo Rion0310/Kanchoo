@@ -1028,33 +1028,6 @@ function updateBoardPerspective() {
             }
         });
 
-    const directionButtons =
-    document.querySelectorAll(".direction-button");
-
-directionButtons.forEach(button => {
-
-    if (playerNumber === 2) {
-
-        const direction = button.dataset.direction;
-
-        const reverse = {
-            up: "down",
-            down: "up",
-            left: "right",
-            right: "left"
-        };
-
-        button.dataset.displayDirection =
-            reverse[direction];
-
-    } else {
-
-        button.dataset.displayDirection =
-            button.dataset.direction;
-
-    }
-
-});
 }
 
 
@@ -2950,13 +2923,24 @@ function showDirectionSelection(unit, skill) {
                         right: "→"
                     };
 
+                    const displayDirection =
+                        Number(MY_PLAYER_NUMBER) === 2
+                            ? ({
+                                up: "↓",
+                                down: "↑",
+                                left: "→",
+                                right: "←"
+                            }[direction] || labels[direction])
+                            : labels[direction];
+
                     return `
                         <button
                             type="button"
-                            class="skill-button"
+                            class="skill-button direction-button"
                             data-direction="${direction}"
+                            data-display-direction="${displayDirection}"
                         >
-                            ${labels[direction]}
+                            ${displayDirection}
                         </button>
                     `;
                 }).join("")
@@ -4036,16 +4020,6 @@ function endTurn() {
 
 function updateControlPanel() {
 
-    if (
-    isSpectatorMode() ||
-    Number(battleState.currentPlayer) !== Number(MY_PLAYER_NUMBER)
-) {
-    panel.innerHTML = "";
-    panel.style.display = "none";
-    return;
-}
-
-panel.style.display = "";
     const panel =
         document.getElementById(
             "battle-control-panel"
@@ -4056,6 +4030,21 @@ panel.style.display = "";
         return;
     }
 
+    /*
+     * 操作パネルだけを制御します。
+     * 盤面・パーティ表示の処理には触れません。
+     * 観戦者、または相手ターンではパネルを空にします。
+     */
+    if (
+        isSpectatorMode() ||
+        Number(battleState.currentPlayer) !== Number(MY_PLAYER_NUMBER)
+    ) {
+        panel.innerHTML = "";
+        panel.style.display = "none";
+        return;
+    }
+
+    panel.style.display = "";
 
     const selected =
         getUnit(
