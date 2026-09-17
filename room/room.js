@@ -121,6 +121,8 @@
 
     let myPlayerNumber = 0;
 
+    let selectedTable = null;
+
     let myReady = false;
 
     let battleStartedHandled =
@@ -207,20 +209,8 @@
             return myPlayerNumber;
         }
 
-        // room_stateに番号が含まれない場合でも、
-        // 自分の名前からPLAYER 1/2を復元します。
-        const players =
-            roomState.battlePlayers || [];
-
-        const index = players.findIndex(
-            player =>
-                player?.name === playerName
-        );
-
-        if (index === 0 || index === 1) {
-            myPlayerNumber = index + 1;
-        }
-
+        // 卓を選択していない状態では、自分の名前が空席に一致していても
+        // PLAYER扱いにはしません。
         return myPlayerNumber;
     }
 
@@ -299,15 +289,14 @@
         if (
             selectedTableDisplay
         ) {
-            if (
-                myPlayerNumber === 1 ||
-                myPlayerNumber === 2
-            ) {
-                selectedTableDisplay.textContent =
-                    "対戦卓";
+            if (selectedTable === "battle1") {
+                selectedTableDisplay.textContent = "対戦卓1";
+            } else if (selectedTable === "battle2") {
+                selectedTableDisplay.textContent = "対戦卓2";
+            } else if (selectedTable === "spectator") {
+                selectedTableDisplay.textContent = "観戦卓";
             } else {
-                selectedTableDisplay.textContent =
-                    "観戦";
+                selectedTableDisplay.textContent = "卓を選択してください";
             }
         }
 
@@ -316,8 +305,8 @@
         ) {
             battleTable.classList.toggle(
                 "active",
-                myPlayerNumber === 1 ||
-                myPlayerNumber === 2
+                selectedTable === "battle1" ||
+                selectedTable === "battle2"
             );
         }
 
@@ -326,7 +315,7 @@
         ) {
             spectatorTable.classList.toggle(
                 "active",
-                myPlayerNumber === 0
+                selectedTable === "spectator"
             );
         }
 
@@ -514,13 +503,13 @@
                         message.playerNumber
                     );
 
-                if (
+                // ROOM入室時点では卓未選択です。
+                // 卓の割り当てはtable_assignedで受け取ります。
+                myPlayerNumber =
                     assignedPlayerNumber === 1 ||
                     assignedPlayerNumber === 2
-                ) {
-                    myPlayerNumber =
-                        assignedPlayerNumber;
-                }
+                        ? assignedPlayerNumber
+                        : 0;
 
                 resolveMyPlayerNumber();
 
@@ -567,6 +556,28 @@
                 break;
             }
 
+            case "table_assigned": {
+                selectedTable =
+                    message.table || null;
+
+                const assigned =
+                    Number(message.playerNumber);
+
+                myPlayerNumber =
+                    assigned === 1 || assigned === 2
+                        ? assigned
+                        : 0;
+
+                resolveMyPlayerNumber();
+                renderRoom();
+                break;
+            }
+
+            case "room_error": {
+                window.alert(message.message || "卓のアサインに失敗しました。");
+                break;
+            }
+
             case "battle_start": {
                 if (
                     battleStartedHandled
@@ -577,13 +588,26 @@
                 battleStartedHandled =
                     true;
 
-                const myPlayer =
-                    message.players?.find(
-                        player =>
-                            player.name ===
+                if (selectedTable !== "battle1" &&
+                    selectedTable !== "battle2" &&
+                    selectedTable !== "spectator") {
+                    // 卓未選択のROOM参加者は試合開始してもBATTLEへ移動しません。
+                    battleStartedHandled = false;
+                    return;
+                }
+
+                if (selectedTable === "spectator") {
+                    window.location.href =
+                        `../battle/battle.html?room=${encodeURIComponent(
+                            FIXED_ROOM_ID
+                        )}&spectator=true&name=${encodeURIComponent(
                             playerName
-                    )?.player ||
-                    myPlayerNumber;
+                        )}`;
+                    return;
+                }
+
+                const myPlayer =
+                    selectedTable === "battle2" ? 2 : 1;
 
                 window.location.href =
                     `../battle/battle.html?room=${encodeURIComponent(
@@ -640,41 +664,33 @@
     }
 
     /*
-     * 卓選択は不要。
-     * 1・2番なら自動的に対戦卓。
-     * 3人目以降は自動的に観戦。
+     * 卓は自動アサインせず、ユーザーが明示的に選択します。
      */
 
-    battleTable?.addEventListener(
-        "click",
-        () => {
-            /*
-             * 自動参加方式なので
-             * ここでは何もしない。
-             */
+    function selectTable(table) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            return;
         }
+
+        send({
+            type: "room_select_table",
+            table
+        });
+    }
+
+    battlePlayer1?.addEventListener(
+        "click",
+        () => selectTable("battle1")
+    );
+
+    battlePlayer2?.addEventListener(
+        "click",
+        () => selectTable("battle2")
     );
 
     spectatorTable?.addEventListener(
         "click",
-        () => {
-            if (!FIXED_ROOM_ID) return;
-
-            // 観戦卓を選択した瞬間にはBATTLEへ移動しない。
-            // サーバー側に「観戦卓へアサイン」とだけ通知し、
-            // 試合開始時の battle_start を待ちます。
-            send({
-                type: "room_select_table",
-                table: "spectator"
-            });
-
-            if (selectedTableDisplay) {
-                selectedTableDisplay.textContent =
-                    "観戦卓にアサイン済み";
-            }
-
-            spectatorTable.classList.add("selected");
-        }
+        () => selectTable("spectator")
     );
 
     readyButton?.addEventListener(

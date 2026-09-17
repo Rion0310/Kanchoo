@@ -140,7 +140,7 @@ function sendBattleStart(room) {
         if (
             socket.readyState === WebSocket.OPEN &&
             (socket.playerNumber === 1 || socket.playerNumber === 2 ||
-                socket.playerNumber === 0)
+                room.spectators.has(socket))
         ) {
             send(socket, payload);
         }
@@ -199,24 +199,16 @@ function handleMessage(socket, message) {
 
         socket.room = room;
         socket.playerName = name;
+        socket.playerNumber = playerIndex !== -1 ? playerIndex + 1 : 0;
+        socket.table = playerIndex !== -1 ? `battle${playerIndex + 1}` : null;
 
+        // ROOMへ入っただけでは卓に自動アサインしません。
+        // 既存PLAYERのBATTLE再接続だけは、名前から元の卓を復元します。
         if (playerIndex !== -1) {
             socket.playerNumber = playerIndex + 1;
-
-            const player = room.battlePlayers[playerIndex];
-            const isExistingPlayer = player.name === name;
-
-            player.name = name;
-
-            // BATTLE側の再接続では、ROOMで確定したparty / readyを保持する。
-            if (!isExistingPlayer) {
-                player.ready = false;
-                player.party = [];
-            }
         } else {
-            // 3人目以降は観戦者
             socket.playerNumber = 0;
-            room.spectators.add(socket);
+            socket.table = null;
         }
 
         room.sockets.add(socket);
@@ -237,54 +229,81 @@ function handleMessage(socket, message) {
     if (data.type === "room_select_table") {
         const table = data.table;
 
-        if (table === "battle") {
-            let index = room.battlePlayers.findIndex(
-                player =>
-                    player.name === socket.playerName
+        if (table === "spectator") {
+            // 観戦卓を選択した場合はPLAYER枠を取得せず、
+            // この接続を観戦者として登録します。
+            room.spectators.add(socket);
+            socket.playerNumber = 0;
+            socket.table = "spectator";
+
+            send(socket, {
+                type: "table_assigned",
+                table: "spectator"
+            });
+
+            broadcastRoom(room);
+            return;
+        }
+
+        let requestedIndex = -1;
+
+        if (table === "battle1" || table === "battle2") {
+            requestedIndex = Number(table.slice(-1)) - 1;
+        } else if (table === "battle") {
+            // BATTLE側の再接続用。名前から元のPLAYER枠を復元します。
+            requestedIndex = room.battlePlayers.findIndex(
+                player => player.name === socket.playerName
             );
 
-            if (index === -1) {
-                index = room.battlePlayers.findIndex(
+            if (requestedIndex === -1) {
+                requestedIndex = room.battlePlayers.findIndex(
                     player => !player.name
                 );
             }
+        }
 
-            if (index !== -1) {
-                const player = room.battlePlayers[index];
-                const isExistingPlayer = player.name === socket.playerName;
-
-                player.name = socket.playerName;
-
-                // BATTLEへの再接続ではROOMで確定したparty / readyを保持する。
-                if (!isExistingPlayer) {
-                    player.ready = false;
-                    player.party = [];
-                }
-
-                socket.playerNumber = index + 1;
-
-                /*
-                 * [PARTY FIX 2: battle接続ではpartyを変更しない]
-                 *
-                 * partyの確定はROOMのroom_readyで行います。
-                 * battle画面から送られてくるpartyで上書きしません。
-                 */
-            }
-
-            room.spectators.delete(socket);
-            broadcastRoom(room);
+        if (requestedIndex !== 0 && requestedIndex !== 1) {
+            send(socket, {
+                type: "room_error",
+                message: "指定された対戦卓が見つかりません。"
+            });
             return;
         }
 
-        if (table === "spectator") {
-            // すでにPLAYERとして割り当てられている接続を
-            // 卓選択だけでPLAYER枠から外さない。
-            if (socket.playerNumber === 0) {
-                room.spectators.add(socket);
-            }
-            broadcastRoom(room);
+        const player = room.battlePlayers[requestedIndex];
+
+        // 他のプレイヤーが使用中の卓にはアサインしません。
+        if (player.name && player.name !== socket.playerName) {
+            send(socket, {
+                type: "room_error",
+                message: `対戦卓${requestedIndex + 1}は使用中です。`
+            });
             return;
         }
+
+        // 以前観戦卓にいた場合は解除します。
+        room.spectators.delete(socket);
+
+        const isExistingPlayer = player.name === socket.playerName;
+        player.name = socket.playerName;
+
+        // 新しくPLAYER枠を取った場合だけREADY/PARTYを初期化します。
+        if (!isExistingPlayer) {
+            player.ready = false;
+            player.party = [];
+        }
+
+        socket.playerNumber = requestedIndex + 1;
+        socket.table = `battle${requestedIndex + 1}`;
+
+        send(socket, {
+            type: "table_assigned",
+            table: socket.table,
+            playerNumber: socket.playerNumber
+        });
+
+        broadcastRoom(room);
+        return;
     }
 
     if (data.type === "room_ready") {
