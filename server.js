@@ -18,7 +18,8 @@ function createRoom(roomId) {
         sockets: new Set(),
         battleStarted: false,//
         battleState: null,
-        expectedPlayer: 1
+        expectedPlayer: 1,
+        battleResetTimer: null
     };
 }
 
@@ -27,6 +28,57 @@ function getOrCreateRoom(roomId) {
     if (!id) return null;
     if (!rooms.has(id)) rooms.set(id, createRoom(id));
     return rooms.get(id);
+}
+
+
+function resetBattleRoom(room) {
+    if (!room) return;
+
+    if (room.battleResetTimer) {
+        clearTimeout(room.battleResetTimer);
+        room.battleResetTimer = null;
+    }
+
+    room.battleStarted = false;
+    room.battleState = null;
+    room.expectedPlayer = 1;
+
+    room.battlePlayers = [
+        { name: "", ready: false, party: [] },
+        { name: "", ready: false, party: [] }
+    ];
+
+    // 現在のROOM接続はそのまま残し、
+    // PLAYER枠だけを新しい対戦のために解放する。
+    for (const socket of room.sockets) {
+        socket.inBattle = false;
+
+        if (socket.playerNumber === 1 || socket.playerNumber === 2) {
+            socket.playerNumber = 0;
+            room.spectators.add(socket);
+        }
+    }
+
+    broadcastRoom(room);
+}
+
+function scheduleBattleRoomReset(room, delay = 5000) {
+    if (!room || room.battleResetTimer) return;
+
+    room.battleResetTimer = setTimeout(() => {
+        room.battleResetTimer = null;
+
+        const hasActiveBattleSocket =
+            [...room.sockets].some(
+                socket =>
+                    socket.inBattle &&
+                    socket.readyState === WebSocket.OPEN
+            );
+
+        if (!hasActiveBattleSocket) {
+            resetBattleRoom(room);
+        }
+    }, delay);
 }
 
 function publicRoom(room) {
@@ -309,6 +361,11 @@ function handleMessage(socket, message) {
          */
         socket.inBattle = true;
 
+        if (room.battleResetTimer) {
+            clearTimeout(room.battleResetTimer);
+            room.battleResetTimer = null;
+        }
+
         if (room.battleStarted) {
             sendBattleStart(room);
         }
@@ -406,6 +463,18 @@ function handleMessage(socket, message) {
                     sender: socket.playerNumber
                 });
             }
+        }
+
+        // 勝敗が確定した試合はROOMの対戦卓を解放する。
+        // 最終状態を送信した後に解放するため、結果表示は維持されます。
+        if (incomingState.gameOver === true) {
+            for (const peer of room.sockets) {
+                if (peer.inBattle) {
+                    peer.inBattle = false;
+                }
+            }
+
+            resetBattleRoom(room);
         }
 
         return;
@@ -507,15 +576,27 @@ wss.on("connection", socket => {
             }
         }
 
-        if (
-            room.sockets.size === 0
-        ) {
-            // ROOM → BATTLEでは一時的に全WebSocketが閉じることがある。
-            // 対戦開始済みなら、BATTLE側が再接続するまでroomを保持する。
-            if (!room.battleStarted) {
-                rooms.delete(room.roomId);
+        if (room.sockets.size === 0) {
+            // 接続が完全になくなったROOMは破棄します。
+            if (room.battleResetTimer) {
+                clearTimeout(room.battleResetTimer);
+                room.battleResetTimer = null;
             }
+            rooms.delete(room.roomId);
         } else {
+            const hasActiveBattleSocket =
+                [...room.sockets].some(
+                    peer =>
+                        peer.inBattle &&
+                        peer.readyState === WebSocket.OPEN
+                );
+
+            if (room.battleStarted && !hasActiveBattleSocket) {
+                // ROOM → BATTLEのWebSocket切り替え中に一時的に
+                // 全BATTLE接続がなくなることがあるため、即時解放せず待ちます。
+                scheduleBattleRoomReset(room);
+            }
+
             broadcastRoom(room);
         }
     });

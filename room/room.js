@@ -660,12 +660,20 @@
         () => {
             if (!FIXED_ROOM_ID) return;
 
-            window.location.href =
-                `../battle/battle.html?room=${encodeURIComponent(
-                    FIXED_ROOM_ID
-                )}&spectator=true&name=${encodeURIComponent(
-                    playerName
-                )}`;
+            // 観戦卓を選択した瞬間にはBATTLEへ移動しない。
+            // サーバー側に「観戦卓へアサイン」とだけ通知し、
+            // 試合開始時の battle_start を待ちます。
+            send({
+                type: "room_select_table",
+                table: "spectator"
+            });
+
+            if (selectedTableDisplay) {
+                selectedTableDisplay.textContent =
+                    "観戦卓にアサイン済み";
+            }
+
+            spectatorTable.classList.add("selected");
         }
     );
 
