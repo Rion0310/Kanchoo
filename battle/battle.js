@@ -1,3 +1,19 @@
+
+// ===== CanChokeAcoustic BGM =====
+const canChokeAcousticBGM = new Audio("../CanChokeAcoustic.mp3");
+canChokeAcousticBGM.loop = true;
+canChokeAcousticBGM.volume = 0.15;
+
+function startCanChokeAcousticBGM() {
+    canChokeAcousticBGM.play().catch(() => {
+        // Browser autoplay policy may require the first user interaction.
+    });
+}
+
+window.addEventListener("load", startCanChokeAcousticBGM);
+document.addEventListener("pointerdown", startCanChokeAcousticBGM, { once: true });
+document.addEventListener("keydown", startCanChokeAcousticBGM, { once: true });
+
 (() => {
 
 /* ========================================
@@ -6,7 +22,7 @@
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 16;
+const BOARD_SIZE = 12;
 
 const DATA =
     window.MONSTER_WAR_DATA;
@@ -190,6 +206,7 @@ function applyOnlineState(state) {
             1: String(state.playerNames[1] || "PLAYER1"),
             2: String(state.playerNames[2] || "PLAYER2")
         };
+        updatePlayerNameHeaders();
     }
     battleState.battleLogs =
         Array.isArray(state.battleLogs) ? state.battleLogs : [];
@@ -222,6 +239,20 @@ function applyOnlineState(state) {
     onlineApplyingState = false;
 }
 
+
+function updatePlayerNameHeaders() {
+    const player1NameElement = document.getElementById("player-1-name");
+    const player2NameElement = document.getElementById("player-2-name");
+
+    if (player1NameElement) {
+        player1NameElement.textContent = getPlayerDisplayName(1);
+    }
+
+    if (player2NameElement) {
+        player2NameElement.textContent = getPlayerDisplayName(2);
+    }
+}
+
 function getPlayerDisplayName(playerNumber) {
     const number = Number(playerNumber);
 
@@ -231,6 +262,8 @@ function getPlayerDisplayName(playerNumber) {
 
     return `PLAYER${number}`;
 }
+
+updatePlayerNameHeaders();
 
 function connectOnlineBattle() {
     if (!ONLINE_ROOM_ID) return;
@@ -324,6 +357,7 @@ function connectOnlineBattle() {
                 1: String(player1?.name || "PLAYER1"),
                 2: String(player2?.name || "PLAYER2")
             };
+            updatePlayerNameHeaders();
 
             onlineBattleStarted = true;
 
@@ -401,7 +435,7 @@ function playCharacterSong(characterId) {
 
     if (!song || !song.path) {
         characterSongAudio = new Audio("../audio/CanChoke.mp3");
-        characterSongAudio.volume = 1.0;
+        characterSongAudio.volume = 0.15;
 
         characterSongAudio.play().catch(error => {
             console.error("通常曲の再生に失敗しました。", error);
