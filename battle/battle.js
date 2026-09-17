@@ -150,6 +150,9 @@ function applyOnlineState(state) {
 
     onlineApplyingState = true;
 
+    const previousTurn = battleState.turn;
+    const previousPlayer = battleState.currentPlayer;
+
     battleState.turn = Number(state.turn || 1);
     battleState.currentPlayer = Number(state.currentPlayer || 1);
     battleState.selectedUnitId = state.selectedUnitId ?? null;
@@ -183,6 +186,14 @@ function applyOnlineState(state) {
     renderUnitIcons();
     renderPlayerPanels();
     updateControlPanel();
+
+    if (
+        (battleState.turn !== previousTurn ||
+            battleState.currentPlayer !== previousPlayer) &&
+        battleState.currentPlayer === Number(MY_PLAYER_NUMBER)
+    ) {
+        showYourTurnCutIn();
+    }
 
     onlineApplyingState = false;
 }
@@ -220,6 +231,7 @@ function connectOnlineBattle() {
         if (message.type === "room_connected") {
             if (Number(message.playerNumber) === 1 || Number(message.playerNumber) === 2) {
                 MY_PLAYER_NUMBER = Number(message.playerNumber);
+                updateBoardPerspective();
             }
 
             /*
@@ -304,6 +316,20 @@ function connectOnlineBattle() {
                 }
             }
 
+            if (message.event === "battle_log") {
+                const logData = message.data;
+                const logMessage =
+                    typeof logData?.message === "string"
+                        ? logData.message
+                        : "";
+
+                if (logMessage) {
+                    // 送信元ではすでに追加済みなので、
+                    // サーバーから受信した相手側だけがここを通ります。
+                    addBattleLogFromOnline(logMessage);
+                }
+            }
+
             return;
         }
     });
@@ -362,6 +388,81 @@ function playCharacterSong(characterId) {
 ======================================== */
 
 let killCutInTimer = null;
+let yourTurnCutInTimer = null;
+let lastYourTurnKey = null;
+
+function showYourTurnCutIn() {
+
+    if (Number(MY_PLAYER_NUMBER) !== 1 && Number(MY_PLAYER_NUMBER) !== 2) {
+        return;
+    }
+
+    const key = `${battleState.turn}-${battleState.currentPlayer}`;
+
+    if (lastYourTurnKey === key) {
+        return;
+    }
+
+    lastYourTurnKey = key;
+
+    const existing = document.getElementById("your-turn-cut-in");
+    if (existing) {
+        existing.remove();
+    }
+
+    if (yourTurnCutInTimer) {
+        clearTimeout(yourTurnCutInTimer);
+        yourTurnCutInTimer = null;
+    }
+
+    const cutIn = document.createElement("div");
+    cutIn.id = "your-turn-cut-in";
+    cutIn.innerHTML = `<strong>YOUR TURN</strong>`;
+
+    Object.assign(cutIn.style, {
+        position: "fixed",
+        inset: "0",
+        zIndex: "99999",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        background: "rgba(0,0,0,0.18)",
+        opacity: "0",
+        transition: "opacity 120ms ease"
+    });
+
+    const text = cutIn.querySelector("strong");
+    Object.assign(text.style, {
+        display: "block",
+        padding: "18px 48px",
+        border: "5px solid #ffffff",
+        background: "rgba(0,0,0,0.82)",
+        color: "#ffffff",
+        fontSize: "clamp(42px, 8vw, 110px)",
+        fontWeight: "900",
+        letterSpacing: "0.08em",
+        transform: "skew(-8deg) scale(0.82)",
+        textShadow: "0 0 18px rgba(255,255,255,0.8)",
+        transition: "transform 160ms ease"
+    });
+
+    document.body.appendChild(cutIn);
+
+    requestAnimationFrame(() => {
+        cutIn.style.opacity = "1";
+        text.style.transform = "skew(-8deg) scale(1)";
+    });
+
+    yourTurnCutInTimer = setTimeout(() => {
+        cutIn.style.opacity = "0";
+        text.style.transform = "skew(-8deg) scale(1.08)";
+
+        setTimeout(() => {
+            cutIn.remove();
+        }, 160);
+    }, 760);
+}
 
 function showKillCutIn(attacker) {
     if (!attacker) {
@@ -642,7 +743,7 @@ function ensureBattleLog() {
     return logElement;
 }
 
-function addBattleLog(message) {
+function addBattleLogFromOnline(message) {
 
     if (!message) {
         return;
@@ -655,7 +756,8 @@ function addBattleLog(message) {
     }
 
     battleState.battleLogs.push(String(message));
-logElement.innerHTML = "";
+
+    logElement.innerHTML = "";
 
     battleState.battleLogs.forEach(
         (messageText, index) => {
@@ -680,6 +782,95 @@ logElement.innerHTML = "";
 
     logElement.scrollTop =
         logElement.scrollHeight;
+}
+
+
+function addBattleLog(message) {
+
+    if (!message) {
+        return;
+    }
+
+    const logElement = ensureBattleLog();
+
+    if (!logElement) {
+        return;
+    }
+
+    const logMessage = String(message);
+    battleState.battleLogs.push(logMessage);
+
+    // オンライン対戦ではログを即時イベントとして相手へ送信します。
+    // battle_stateの送信タイミングに依存しないため、
+    // キルログなども両画面へ確実に反映されます。
+    if (
+        ONLINE_ROOM_ID &&
+        onlineSocket &&
+        onlineSocket.readyState === WebSocket.OPEN &&
+        !onlineApplyingState
+    ) {
+        onlineSendBattleEvent("battle_log", {
+            message: logMessage
+        });
+    }
+
+    logElement.innerHTML = "";
+
+    battleState.battleLogs.forEach(
+        (messageText, index) => {
+
+            const entry =
+                document.createElement("div");
+
+            entry.className = "battle-log-entry";
+
+            if (
+                index ===
+                battleState.battleLogs.length - 1
+            ) {
+                entry.classList.add("latest");
+            }
+
+            entry.textContent = messageText;
+
+            logElement.appendChild(entry);
+        }
+    );
+
+    logElement.scrollTop =
+        logElement.scrollHeight;
+}
+
+
+/* ========================================
+   BOARD PERSPECTIVE
+======================================== */
+
+function updateBoardPerspective() {
+
+    if (!battleField) {
+        return;
+    }
+
+    const playerNumber = Number(MY_PLAYER_NUMBER);
+
+    battleField
+        .querySelectorAll(".board-cell")
+        .forEach(cell => {
+
+            const row = Number(cell.dataset.row);
+            const column = Number(cell.dataset.column);
+
+            if (playerNumber === 2) {
+                // P2側ではP2の陣営が手前になるよう、
+                // ゲームデータを変更せず表示位置だけ180度反転します。
+                cell.style.gridRow = String(BOARD_SIZE - row + 1);
+                cell.style.gridColumn = String(BOARD_SIZE - column + 1);
+            } else {
+                cell.style.gridRow = String(row);
+                cell.style.gridColumn = String(column);
+            }
+        });
 }
 
 
@@ -748,6 +939,7 @@ function createBoard() {
 
     }
 
+    updateBoardPerspective();
     renderCastles();
 }
 
@@ -1777,12 +1969,35 @@ function moveUnit(
 
     updateControlPanel();
 
+    // 移動した時点で即座に相手へ盤面を同期します。
+    // 行動終了まで待たないため、移動そのものが遅れて表示されません。
+    onlineSendState();
+
 }
 
 
 /* ========================================
    ACTION
 ======================================== */
+
+function areAllCurrentPlayerUnitsActed() {
+
+    const currentPlayer = Number(battleState.currentPlayer);
+
+    const aliveUnits = battleState.units.filter(
+        unit =>
+            unit.alive &&
+            Number(unit.player) === currentPlayer
+    );
+
+    if (aliveUnits.length === 0) {
+        return false;
+    }
+
+    return aliveUnits.every(
+        unit => battleState.movedUnits.has(unit.unitId)
+    );
+}
 
 function finishUnitAction() {
 
@@ -1801,6 +2016,11 @@ function finishUnitAction() {
     renderUnitIcons();
     renderPlayerPanels();
     updateControlPanel();
+
+    if (areAllCurrentPlayerUnitsActed()) {
+        endTurn();
+        return;
+    }
 
     onlineSendState();
 
@@ -3488,6 +3708,9 @@ function endTurn() {
 
     }
 
+    if (battleState.currentPlayer === Number(MY_PLAYER_NUMBER)) {
+        showYourTurnCutIn();
+    }
 
     renderUnitIcons();
 

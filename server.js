@@ -326,7 +326,8 @@ function handleMessage(socket, message) {
         for (const peer of room.sockets) {
             if (
                 peer.inBattle &&
-                peer.readyState === WebSocket.OPEN
+                peer.readyState === WebSocket.OPEN &&
+                (eventName !== "battle_log" || peer !== socket)
             ) {
                 send(peer, {
                     type: "battle_event",
