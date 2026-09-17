@@ -3791,3 +3791,32 @@ body {
         font-size: 9px !important;
     }
 }
+
+/* ========================================
+   DIRECTION BUTTON DISPLAY
+   PLAYER2視点では矢印を180度反転
+======================================== */
+
+.direction-button {
+    font-size: 0;
+}
+
+.direction-button[data-display-direction="up"]::before {
+    content: "↑";
+}
+
+.direction-button[data-display-direction="down"]::before {
+    content: "↓";
+}
+
+.direction-button[data-display-direction="left"]::before {
+    content: "←";
+}
+
+.direction-button[data-display-direction="right"]::before {
+    content: "→";
+}
+
+.direction-button::before {
+    font-size: 24px;
+}
