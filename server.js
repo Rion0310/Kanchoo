@@ -87,7 +87,8 @@ function sendBattleStart(room) {
     for (const socket of room.sockets) {
         if (
             socket.readyState === WebSocket.OPEN &&
-            (socket.playerNumber === 1 || socket.playerNumber === 2)
+            (socket.playerNumber === 1 || socket.playerNumber === 2 ||
+                socket.playerNumber === 0)
         ) {
             send(socket, payload);
         }
@@ -273,7 +274,29 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "battle_join") {
-        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+        if (
+            socket.playerNumber !== 0 &&
+            socket.playerNumber !== 1 &&
+            socket.playerNumber !== 2
+        ) {
+            return;
+        }
+
+        socket.inBattle = true;
+
+        if (socket.playerNumber === 0) {
+            if (room.battleStarted) {
+                sendBattleStart(room);
+            }
+
+            if (room.battleState) {
+                send(socket, {
+                    type: "battle_state",
+                    state: room.battleState,
+                    sender: "server"
+                });
+            }
+
             return;
         }
 

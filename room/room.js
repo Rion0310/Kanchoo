@@ -658,10 +658,14 @@
     spectatorTable?.addEventListener(
         "click",
         () => {
-            /*
-             * 自動参加方式なので
-             * ここでは何もしない。
-             */
+            if (!FIXED_ROOM_ID) return;
+
+            window.location.href =
+                `../battle/battle.html?room=${encodeURIComponent(
+                    FIXED_ROOM_ID
+                )}&spectator=true&name=${encodeURIComponent(
+                    playerName
+                )}`;
         }
     );
 

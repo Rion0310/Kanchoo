@@ -54,27 +54,28 @@ const player2Status =
    ONLINE BATTLE
 ======================================== */
 
-$1
+const battleUrlParams =
+    new URLSearchParams(window.location.search);
 
-// 観戦者モード判定
+const ONLINE_ROOM_ID =
+    battleUrlParams.get("room") || "";
+
 const IS_SPECTATOR =
     battleUrlParams.get("spectator") === "true" ||
     battleUrlParams.get("mode") === "spectator" ||
     battleUrlParams.get("player") === "spectator";
 
+let MY_PLAYER_NUMBER = IS_SPECTATOR
+    ? 0
+    : (Number(battleUrlParams.get("player")) === 2 ? 2 : 1);
 
-const ONLINE_ROOM_ID =
-    battleUrlParams.get("room") || "";
+const ONLINE_PLAYER_NAME =
+    battleUrlParams.get("name") ||
+    (IS_SPECTATOR ? "SPECTATOR" : `PLAYER${MY_PLAYER_NUMBER}`);
 
 function isSpectatorMode() {
     return IS_SPECTATOR || MY_PLAYER_NUMBER === 0;
 }
-
-let MY_PLAYER_NUMBER = IS_SPECTATOR ? 0 : (Number(battleUrlParams.get("player")) === 2 ? 2 : 1);
-
-const ONLINE_PLAYER_NAME =
-    battleUrlParams.get("name") ||
-    `PLAYER${MY_PLAYER_NUMBER}`;
 
 let onlineSocket = null;
 let onlineApplyingState = false;
@@ -214,6 +215,7 @@ function applyOnlineState(state) {
     if (
         !previousGameOver && battleState.gameOver &&
         battleState.winner &&
+        !isSpectatorMode() &&
         battleState.winner !== Number(MY_PLAYER_NUMBER)
     ) {
         showYouLoseCutIn();
@@ -222,6 +224,7 @@ function applyOnlineState(state) {
     if (
         (battleState.turn !== previousTurn ||
             battleState.currentPlayer !== previousPlayer) &&
+        !isSpectatorMode() &&
         battleState.currentPlayer === Number(MY_PLAYER_NUMBER)
     ) {
         showYourTurnCutIn();
@@ -287,9 +290,13 @@ function connectOnlineBattle() {
         }
 
         if (message.type === "room_connected") {
-            if (Number(message.playerNumber) === 1 || Number(message.playerNumber) === 2) {
-                MY_PLAYER_NUMBER = Number(message.playerNumber);
+            const assignedPlayerNumber = Number(message.playerNumber);
+
+            if (assignedPlayerNumber === 1 || assignedPlayerNumber === 2) {
+                MY_PLAYER_NUMBER = assignedPlayerNumber;
                 updateBoardPerspective();
+            } else if (assignedPlayerNumber === 0) {
+                MY_PLAYER_NUMBER = 0;
             }
 
             /*
@@ -304,13 +311,14 @@ function connectOnlineBattle() {
              */
             onlineSocket.send(JSON.stringify({
                 type: "room_select_table",
-                table: "battle"
+                table: isSpectatorMode() ? "spectator" : "battle"
             }));
 
             onlineSocket.send(JSON.stringify({
                 type: "battle_join",
                 roomId: ONLINE_ROOM_ID,
-                player: MY_PLAYER_NUMBER
+                player: MY_PLAYER_NUMBER,
+                spectator: isSpectatorMode()
             }));
 
             return;
@@ -356,7 +364,7 @@ function connectOnlineBattle() {
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
-            if (MY_PLAYER_NUMBER === 1) {
+            if (MY_PLAYER_NUMBER === 1 && !isSpectatorMode()) {
                 onlineSendState();
             }
             return;
@@ -1357,29 +1365,29 @@ function getFormationPositions(
 
     /*
      * 攻城戦の初期配置
-     *
-     * PLAYER 2：右上の城（1,16）をL字に囲む
-     * PLAYER 1：左下の城（16,1）をL字に囲む
+     * BOARD_SIZEに追従して、盤面外へ出ないようにする。
+     * PLAYER 2：右上の城をL字に囲む
+     * PLAYER 1：左下の城をL字に囲む
      */
 
     if (player === 2) {
         return [
-            { row: 2, column: 16 },
-            { row: 3, column: 16 },
-            { row: 4, column: 16 },
-            { row: 1, column: 15 },
-            { row: 1, column: 14 },
-            { row: 1, column: 13 }
+            { row: 2, column: BOARD_SIZE },
+            { row: 3, column: BOARD_SIZE },
+            { row: 4, column: BOARD_SIZE },
+            { row: 1, column: BOARD_SIZE - 1 },
+            { row: 1, column: BOARD_SIZE - 2 },
+            { row: 1, column: BOARD_SIZE - 3 }
         ];
     }
 
     return [
-        { row: 15, column: 1 },
-        { row: 14, column: 1 },
-        { row: 13, column: 1 },
-        { row: 16, column: 2 },
-        { row: 16, column: 3 },
-        { row: 16, column: 4 }
+        { row: BOARD_SIZE - 1, column: 1 },
+        { row: BOARD_SIZE - 2, column: 1 },
+        { row: BOARD_SIZE - 3, column: 1 },
+        { row: BOARD_SIZE, column: 2 },
+        { row: BOARD_SIZE, column: 3 },
+        { row: BOARD_SIZE, column: 4 }
     ];
 }
 
@@ -2177,6 +2185,8 @@ function finishUnitAction() {
 ======================================== */
 
 function waitUnit() {
+    if (isSpectatorMode()) return;
+
 
     if (
         ONLINE_ROOM_ID &&
@@ -2212,6 +2222,8 @@ function waitUnit() {
 ======================================== */
 
 function bluffUnit() {
+    if (isSpectatorMode()) return;
+
 
     if (
         ONLINE_ROOM_ID &&
@@ -3388,8 +3400,6 @@ function executeSkill(
     skill,
     targetCells
 ) {
-    if (isSpectatorMode()) return;
-
 
     if (
         ONLINE_ROOM_ID &&
