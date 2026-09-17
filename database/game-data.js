@@ -176,8 +176,8 @@ const characterDatabase = [
         name: "デスリオン",
         image: "../images/deathrion.png",
         hp: 130,
-        attack: 200,
-        defense: 80,
+        attack: 250,
+        defense: 100,
         move: 4,
         description: "りおんが我が道往くためにデスカンチョーに堕ちた姿。",
         type: "attacker"
@@ -202,16 +202,16 @@ const characterDatabase = [
         defense: 100,
         move: 4,
         description: "弱っちい。なぜなら女だから。",
-        type: "attacker"
+        type: "healer"
     },
     {
         id: 4,
         name: "りおん",
         image: "../images/rion.png",
         hp: 150,
-        attack: 170,
+        attack: 200,
         defense: 100,
-        move: 3,
+        move: 5,
         description: "しおんの相棒。素早い。",
         type: "attacker"
     },
@@ -339,6 +339,11 @@ const characterDatabase = [
 ];
 
 const characterSongDatabase = {
+    1: {
+        path: "../audio/death.mp3",
+        title: "デスリオン"
+    },
+
     2: {
         path: "../audio/kiyotake.mp3",
         title: "清武のテーマ"

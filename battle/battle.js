@@ -123,6 +123,28 @@ function onlineSendState() {
     }));
 }
 
+
+/*
+ * [BATTLE EVENT]
+ * 一度きりの演出を対戦相手にも同期します。
+ * battle_stateには演出イベントを含めません。
+ */
+function onlineSendBattleEvent(event, data = null) {
+    if (
+        !ONLINE_ROOM_ID ||
+        !onlineSocket ||
+        onlineSocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    onlineSocket.send(JSON.stringify({
+        type: "battle_event",
+        event,
+        data
+    }));
+}
+
 function applyOnlineState(state) {
     if (!state || typeof state !== "object") return;
 
@@ -266,6 +288,23 @@ function connectOnlineBattle() {
 
         if (message.type === "battle_state") {
             applyOnlineState(message.state);
+            return;
+        }
+
+        if (message.type === "battle_event") {
+            if (message.event === "kill_cut_in") {
+                const attacker = message.data;
+
+                if (attacker) {
+                    showKillCutIn(attacker);
+
+                    if (attacker.characterId != null) {
+                        playCharacterSong(attacker.characterId);
+                    }
+                }
+            }
+
+            return;
         }
     });
 
@@ -288,32 +327,33 @@ let characterSongAudio = null;
 
 function playCharacterSong(characterId) {
 
-    const song =
-        characterSongDatabase?.[characterId];
-
-    if (!song || !song.path) {
-        return;
-    }
+    const song = characterSongDatabase?.[characterId];
 
     if (characterSongAudio) {
         characterSongAudio.pause();
         characterSongAudio.currentTime = 0;
     }
 
-    characterSongAudio =
-        new Audio(song.path);
+    if (!song || !song.path) {
+        characterSongAudio = new Audio("../audio/CanChoke.mp3");
+        characterSongAudio.volume = 1.0;
 
+        characterSongAudio.play().catch(error => {
+            console.error("通常曲の再生に失敗しました。", error);
+        });
+
+        console.log("通常曲を再生します。");
+        return;
+    }
+
+    characterSongAudio = new Audio(song.path);
     characterSongAudio.volume = 1.0;
 
-    characterSongAudio.play().catch(
-        error => {
-            Audio("../audio/CanChoke.mp3");
-        }
-    );
+    characterSongAudio.play().catch(error => {
+        console.error("キャラソングの再生に失敗しました。", error);
+    });
 
-    console.log(
-        `${song.title} を再生します。`
-    );
+    console.log(`${song.title} を再生します。`);
 }
 
 
@@ -1317,9 +1357,7 @@ function clearCellStates() {
    MOVEMENT RANGE
 ======================================== */
 
-function getMovableCells(
-    unit
-) {
+function getMovableCells(unit) {
 
     if (!unit || !unit.alive) {
         return [];
@@ -1335,8 +1373,19 @@ function getMovableCells(
      * 奥へ移動することはできません。
      *
      * 敵城は空きマスなので侵入可能です。
+     *
+     * 現在いるマスも移動先として選択可能。
+     * その場にとどまる場合は
+     * 現在位置をクリックします。
      */
-    const cells = [];
+
+    const cells = [
+        {
+            row: unit.row,
+            column: unit.column
+        }
+    ];
+
     const queue = [
         {
             row: unit.row,
@@ -1350,16 +1399,27 @@ function getMovableCells(
     ]);
 
     const directions = [
-        { row: -1, column: 0 },
-        { row: 1, column: 0 },
-        { row: 0, column: -1 },
-        { row: 0, column: 1 }
+        {
+            row: -1,
+            column: 0
+        },
+        {
+            row: 1,
+            column: 0
+        },
+        {
+            row: 0,
+            column: -1
+        },
+        {
+            row: 0,
+            column: 1
+        }
     ];
 
     while (queue.length > 0) {
 
-        const current =
-            queue.shift();
+        const current = queue.shift();
 
         if (
             current.distance >=
@@ -2720,11 +2780,28 @@ function applyDamage(
         target.alive = false;
         addBattleLog(`${target.name}は倒れた！`);
 
-        // 撃破したキャラクターの専用曲を再生
+        // 撃破演出をオンライン対戦では両画面へ送信する。
+        // オフラインでは従来どおりこの画面だけで再生する。
         if (attacker && attacker.characterId != null) {
-            showKillCutIn(attacker);
-
-          playCharacterSong(attacker.characterId);
+            if (
+                ONLINE_ROOM_ID &&
+                onlineSocket &&
+                onlineSocket.readyState === WebSocket.OPEN
+            ) {
+                onlineSendBattleEvent(
+                    "kill_cut_in",
+                    {
+                        unitId: attacker.unitId,
+                        player: attacker.player,
+                        name: attacker.name,
+                        image: attacker.image,
+                        characterId: attacker.characterId
+                    }
+                );
+            } else {
+                showKillCutIn(attacker);
+                playCharacterSong(attacker.characterId);
+            }
         }
     }
 

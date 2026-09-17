@@ -301,6 +301,45 @@ function handleMessage(socket, message) {
         return;
     }
 
+    if (data.type === "battle_event") {
+        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+            return;
+        }
+
+        if (!socket.inBattle) return;
+
+        const eventName = String(data.event || "").trim();
+
+        if (!eventName) {
+            return;
+        }
+
+        /*
+         * [BATTLE EVENT]
+         * 攻撃側で発生した一度きりの演出イベントを
+         * 同じ対戦ルームの両プレイヤーへ中継します。
+         *
+         * battle_stateとは分離しているため、
+         * 状態同期の上書きによってキルカットインが
+         * 消えたり二重発生したりすることを防ぎます。
+         */
+        for (const peer of room.sockets) {
+            if (
+                peer.inBattle &&
+                peer.readyState === WebSocket.OPEN
+            ) {
+                send(peer, {
+                    type: "battle_event",
+                    event: eventName,
+                    data: data.data || null,
+                    sender: socket.playerNumber
+                });
+            }
+        }
+
+        return;
+    }
+
     if (data.type === "battle_state") {
         if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
             return;
