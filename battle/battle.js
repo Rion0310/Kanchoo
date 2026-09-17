@@ -73,6 +73,10 @@ let onlineSocket = null;
 let onlineApplyingState = false;
 let onlineParty1 = null;
 let onlineParty2 = null;
+let onlinePlayerNames = {
+    1: "PLAYER1",
+    2: "PLAYER2"
+};
 let onlineBattleStarted = false;
 
 function getOnlineWebSocketUrl() {
@@ -101,6 +105,9 @@ function serializeBattleState() {
         selectedSkillId: battleState.selectedSkillId,
         skillStep: battleState.skillStep,
         gameOver: battleState.gameOver,
+        winner: battleState.winner,
+        gameOverReason: battleState.gameOverReason,
+        playerNames: onlinePlayerNames,
         battleLogs: battleState.battleLogs,
         bluffUnits: [...battleState.bluffUnits],
         bluffUses: battleState.bluffUses
@@ -152,6 +159,7 @@ function applyOnlineState(state) {
 
     const previousTurn = battleState.turn;
     const previousPlayer = battleState.currentPlayer;
+    const previousGameOver = battleState.gameOver;
 
     battleState.turn = Number(state.turn || 1);
     battleState.currentPlayer = Number(state.currentPlayer || 1);
@@ -175,6 +183,14 @@ function applyOnlineState(state) {
             : [];
     battleState.selectedSkillId = state.selectedSkillId ?? null;
     battleState.gameOver = !!state.gameOver;
+    battleState.winner = Number(state.winner) || null;
+    battleState.gameOverReason = state.gameOverReason || "";
+    if (state.playerNames && typeof state.playerNames === "object") {
+        onlinePlayerNames = {
+            1: String(state.playerNames[1] || "PLAYER1"),
+            2: String(state.playerNames[2] || "PLAYER2")
+        };
+    }
     battleState.battleLogs =
         Array.isArray(state.battleLogs) ? state.battleLogs : [];
     battleState.bluffUnits =
@@ -188,6 +204,14 @@ function applyOnlineState(state) {
     updateControlPanel();
 
     if (
+        !previousGameOver && battleState.gameOver &&
+        battleState.winner &&
+        battleState.winner !== Number(MY_PLAYER_NUMBER)
+    ) {
+        showYouLoseCutIn();
+    }
+
+    if (
         (battleState.turn !== previousTurn ||
             battleState.currentPlayer !== previousPlayer) &&
         battleState.currentPlayer === Number(MY_PLAYER_NUMBER)
@@ -196,6 +220,16 @@ function applyOnlineState(state) {
     }
 
     onlineApplyingState = false;
+}
+
+function getPlayerDisplayName(playerNumber) {
+    const number = Number(playerNumber);
+
+    if (number === 1 || number === 2) {
+        return onlinePlayerNames[number] || `PLAYER${number}`;
+    }
+
+    return `PLAYER${number}`;
 }
 
 function connectOnlineBattle() {
@@ -285,6 +319,11 @@ function connectOnlineBattle() {
             if (Array.isArray(player2?.party)) {
                 onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, 6);
             }
+
+            onlinePlayerNames = {
+                1: String(player1?.name || "PLAYER1"),
+                2: String(player2?.name || "PLAYER2")
+            };
 
             onlineBattleStarted = true;
 
@@ -534,6 +573,58 @@ function showKillCutIn(attacker) {
 
 
 
+
+function showYouLoseCutIn() {
+    const existing = document.getElementById("you-lose-cut-in");
+    if (existing) existing.remove();
+
+    const cutIn = document.createElement("div");
+    cutIn.id = "you-lose-cut-in";
+    cutIn.innerHTML = `<strong>YOU LOSE</strong>`;
+
+    Object.assign(cutIn.style, {
+        position: "fixed",
+        inset: "0",
+        zIndex: "100000",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        background: "rgba(0,0,0,0.30)",
+        opacity: "0",
+        transition: "opacity 140ms ease"
+    });
+
+    const text = cutIn.querySelector("strong");
+    Object.assign(text.style, {
+        display: "block",
+        padding: "18px 48px",
+        border: "5px solid #ffffff",
+        background: "rgba(0,0,0,0.88)",
+        color: "#ffffff",
+        fontSize: "clamp(42px, 8vw, 110px)",
+        fontWeight: "900",
+        letterSpacing: "0.08em",
+        transform: "skew(-8deg) scale(0.82)",
+        textShadow: "0 0 18px rgba(255,255,255,0.8)",
+        transition: "transform 160ms ease"
+    });
+
+    document.body.appendChild(cutIn);
+
+    requestAnimationFrame(() => {
+        cutIn.style.opacity = "1";
+        text.style.transform = "skew(-8deg) scale(1)";
+    });
+
+    setTimeout(() => {
+        cutIn.style.opacity = "0";
+        text.style.transform = "skew(-8deg) scale(1.08)";
+        setTimeout(() => cutIn.remove(), 180);
+    }, 1000);
+}
+
+
 /* ========================================
    BATTLE STATE
 ======================================== */
@@ -568,6 +659,10 @@ const battleState = {
     selectedSkillId: null,
 
     gameOver: false,
+
+    winner: null,
+
+    gameOverReason: "",
 
     battleLogs: [],
 
@@ -1026,6 +1121,12 @@ function showBattleResult(
     }
 
     battleState.gameOver = true;
+    battleState.winner = Number(winner);
+    battleState.gameOverReason = String(reason || "");
+
+    if (Number(winner) !== Number(MY_PLAYER_NUMBER)) {
+        showYouLoseCutIn();
+    }
 
     battleState.selectedUnitId = null;
     battleState.movableCells = [];
@@ -1052,14 +1153,33 @@ function showBattleResult(
                 </div>
 
                 <strong>
-                    PLAYER ${winner} WIN
+                    ${getPlayerDisplayName(winner)} WIN
                 </strong>
 
                 <span>
                     ${reason}
                 </span>
+
+                <button
+                    type="button"
+                    id="return-title-button"
+                    style="margin-top:18px;padding:12px 24px;cursor:pointer;"
+                >
+                    タイトルに戻る
+                </button>
             </div>
         `;
+    }
+
+    document
+        .getElementById("return-title-button")
+        ?.addEventListener("click", () => {
+            window.location.href = "/title/title.html";
+        });
+
+    // オンライン対戦では勝敗情報を含む最終状態を相手へ即時同期する。
+    if (ONLINE_ROOM_ID && !onlineApplyingState) {
+        onlineSendState();
     }
 }
 
@@ -1125,7 +1245,7 @@ function checkCastleVictory(unit) {
 
     showBattleResult(
         unit.player,
-        `PLAYER ${unit.player}が敵城へ侵入`
+        `${getPlayerDisplayName(unit.player)}が敵城へ侵入`
     );
 
     return true;
@@ -2125,7 +2245,7 @@ function showBluffSelection(unit) {
 
         <div class="turn-info">
             <span>TURN ${battleState.turn}</span>
-            <strong>PLAYER ${battleState.currentPlayer}</strong>
+            <strong>${getPlayerDisplayName(battleState.currentPlayer)}</strong>
         </div>
 
         <div class="selected-info">
@@ -2224,6 +2344,10 @@ function selectBluffType(unit, type) {
     }
 
     playerBluffUses[type] = uses - 1;
+
+    // ブラフを仕込んだこと自体は明示せず、通常の待機と同じログを表示する。
+    addBattleLog(`${unit.name}はその場で待機した！`);
+
     unit.bluffType = type;
     unit.bluffTurn = battleState.turn + 1;
 
@@ -2484,7 +2608,7 @@ function showSkillSelection() {
     panel.innerHTML = `
         <div class="turn-info">
             <span>TURN ${battleState.turn}</span>
-            <strong>PLAYER ${battleState.currentPlayer}</strong>
+            <strong>${getPlayerDisplayName(battleState.currentPlayer)}</strong>
         </div>
 
         <div class="selected-info">
@@ -2637,7 +2761,7 @@ function showDirectionSelection(unit, skill) {
     panel.innerHTML = `
         <div class="turn-info">
             <span>TURN ${battleState.turn}</span>
-            <strong>PLAYER ${battleState.currentPlayer}</strong>
+            <strong>${getPlayerDisplayName(battleState.currentPlayer)}</strong>
         </div>
 
         <div class="selected-info">
@@ -2755,7 +2879,7 @@ function showTargetSelection(unit, skill) {
     panel.innerHTML = `
         <div class="turn-info">
             <span>TURN ${battleState.turn}</span>
-            <strong>PLAYER ${battleState.currentPlayer}</strong>
+            <strong>${getPlayerDisplayName(battleState.currentPlayer)}</strong>
         </div>
 
         <div class="selected-info">
@@ -2800,7 +2924,7 @@ function showSkillConfirmation(unit, skill) {
     panel.innerHTML = `
         <div class="turn-info">
             <span>TURN ${battleState.turn}</span>
-            <strong>PLAYER ${battleState.currentPlayer}</strong>
+            <strong>${getPlayerDisplayName(battleState.currentPlayer)}</strong>
         </div>
 
         <div class="selected-info">
@@ -2943,6 +3067,16 @@ function applyDamage(
         target.bluffTurn === battleState.turn;
 
     if (bluffActive) {
+        const bluffNames = {
+            ketsukacchin: "ケツカッチン",
+            ketsuiki: "ケツイキ",
+            dappunta: "脱糞ター"
+        };
+
+        addBattleLog(
+            `${target.name}の${bluffNames[target.bluffType] || target.bluffType}発動！`
+        );
+
         if (
             target.bluffType === "ketsukacchin" &&
             Number(skill?.id) !== 9
@@ -3767,7 +3901,7 @@ function updateControlPanel() {
                 </span>
 
                 <strong>
-                    PLAYER ${battleState.currentPlayer}
+                    ${getPlayerDisplayName(battleState.currentPlayer)}
                 </strong>
 
             </div>
