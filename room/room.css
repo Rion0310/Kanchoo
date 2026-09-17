@@ -332,7 +332,7 @@ body {
     transition: border-color 0.15s ease;
 }
 
-.table-card:hover {
+.battle-player:hover {
     transform: translateY(-2px);
 
     background: #222;
