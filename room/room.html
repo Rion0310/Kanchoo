@@ -260,6 +260,19 @@
             </div>
 
 
+            <!--
+                [観戦者名の表示]
+                以前は人数(spectator-count)だけを表示していたが、
+                誰が観戦しているか分かるように名前一覧も表示する。
+                room.js側で roomState.spectators (名前の配列) から
+                この要素の中身を動的に組み立てる。
+            -->
+            <div
+                id="spectator-names"
+                class="spectator-names"
+            ></div>
+
+
             <div class="table-description">
                 対戦中のプレイヤーを観戦します
             </div>

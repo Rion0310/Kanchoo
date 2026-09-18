@@ -81,6 +81,7 @@
     const battleTable = document.getElementById("battle-table");
     const spectatorTable = document.getElementById("spectator-table");
     const spectatorCountDisplay = document.getElementById("spectator-count");
+    const spectatorNamesDisplay = document.getElementById("spectator-names");
     const readyButton = document.getElementById("ready-button");
     const backButton = document.getElementById("back-button");
 
@@ -225,11 +226,30 @@
             spectatorTable.classList.toggle("active", selectedTable === "spectator");
         }
 
+        const spectatorNames = roomState.spectators || [];
+
         if (spectatorCountDisplay) {
             // [BUGFIX] 観戦卓の人数表示が常に0のまま更新されていなかった。
-            spectatorCountDisplay.textContent = String(
-                (roomState.spectators || []).length
-            );
+            spectatorCountDisplay.textContent = String(spectatorNames.length);
+        }
+
+        if (spectatorNamesDisplay) {
+            /*
+             * [観戦者名の表示]
+             * 名前は他のユーザーが自由入力した文字列なので、innerHTMLに
+             * そのまま流し込まずtextContentで1件ずつ要素化してから追加する
+             * （XSS対策）。
+             */
+            spectatorNamesDisplay.textContent = "";
+
+            spectatorNames.forEach(name => {
+                const nameChip = document.createElement("span");
+
+                nameChip.className = "spectator-name-chip";
+                nameChip.textContent = name || "SPECTATOR";
+
+                spectatorNamesDisplay.appendChild(nameChip);
+            });
         }
 
         if (readyButton) {
