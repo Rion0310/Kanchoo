@@ -6,7 +6,7 @@
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 8;
+const BOARD_SIZE = 16;
 
 /*
  * [FIELD SIZE / 保守性]
