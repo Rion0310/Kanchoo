@@ -2164,9 +2164,9 @@ function moveUnit(
 
     updateControlPanel();
 
-    // 移動した時点で即座に相手へ盤面を同期します。
-    // 行動終了まで待たないため、移動そのものが遅れて表示されません。
-    onlineSendState();
+    // 移動中はまだ相手へ同期しない。
+    // 「移動 → 移動をやり直す」の途中経過を相手側へ送らず、
+    // 行動確定時にだけ最終状態を同期する。
 
 }
 
@@ -2292,8 +2292,8 @@ function undoMove() {
     renderPlayerPanels();
     updateControlPanel();
 
-    // 相手にも「移動をやり直した」後の盤面を同期する。
-    onlineSendState();
+    // やり直しも途中経過なので、ここでは同期しない。
+    // 次に技・待機・ブラフなどで行動を確定した時点で最終状態を同期する。
 }
 
 function waitUnit() {
@@ -4003,6 +4003,17 @@ function endTurn() {
         battleState.turn++;
 
     }
+
+    // 「連続使用不可」は、次の自分のターンまでの制限。
+    // ターンが切り替わったら、新しく手番になったプレイヤーの
+    // 前回使用技をリセットして再使用できるようにする。
+    battleState.units
+        .filter(unit =>
+            Number(unit.player) === Number(battleState.currentPlayer)
+        )
+        .forEach(unit => {
+            unit.lastSkillId = null;
+        });
 
     if (battleState.currentPlayer === Number(MY_PLAYER_NUMBER)) {
         showYourTurnCutIn();
