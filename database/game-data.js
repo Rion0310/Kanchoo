@@ -19,7 +19,6 @@ const skillDatabase = [
         type: "物理",
         power: 999,
         effect: "damage",
-        maxUsesPerMatch: 1,   // 試合中1回まで（キャラごと）
         accuracy: 50,         // 命中率50%
         description: "当たれば確実に相手を殺せるが、範囲が狭いうえに命中しにくい。試合中1回のみ使用可能。命中率50%。",
         targeting:{
@@ -166,7 +165,7 @@ const skillDatabase = [
         id: 13,
         name: "貫・チョー",
         type: "物理",
-        power: 80,
+        power: 70,
         effect: "damage_falloff_by_target_count",
         description: "前方一列に攻撃。対象が多いほど威力が下がる",
         targeting: {
