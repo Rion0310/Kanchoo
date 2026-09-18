@@ -19,13 +19,15 @@ const skillDatabase = [
         type: "物理",
         power: 999,
         effect: "damage",
-        description: "当たれば確実に相手を殺せるが、範囲が狭い。",
-        targeting: {
-            type: "direction",
-            range: 1,
-            targetCount: "single",
-            targetSide: "enemy"
-        }
+        maxUsesPerMatch: 1,   // 試合中1回まで（キャラごと）
+        accuracy: 50,         // 命中率50%
+        description: "当たれば確実に相手を殺せるが、範囲が狭いうえに命中しにくい。試合中1回のみ使用可能。命中率50%。",
+        targeting:{
+                type: "direction",
+                range: 1,
+                targetCount: "single",
+                targetSide: "enemy"
+            }
     },
     {
         id: 3,

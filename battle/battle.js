@@ -4214,7 +4214,7 @@ function removeTarget(target) {
     }
 }
 
-damage_scale_with_move_distance: (unit, skill, { enemies }, multiplier) => {
+function damage_scale_with_move_distance(unit, skill, { enemies }, multiplier){
 
     // このターン、移動前の位置から何マス移動したか。
     const moveDistance =
@@ -4461,6 +4461,19 @@ function applySkillEffect(
 
         return;
 
+    }
+
+    // [命中率] skill.accuracy（0〜100）が未指定なら常に命中(100)扱い。
+    // デスカンチョーのように外れることがある技は、
+    // game-data.js側のskillDatabaseに accuracy: 50 のように指定するだけでよい。
+    const accuracy =
+        Number.isFinite(Number(skill.accuracy))
+            ? Number(skill.accuracy)
+            : 100;
+
+    if (Math.random() * 100 >= accuracy) {
+        addBattleLog(`${unit.name}の${skill.name}は外れた！`);
+        return;
     }
 
     handler(unit, skill, context, multiplier);
