@@ -57,9 +57,9 @@ const skillDatabase = [
         id: 5,
         name: "銃チョー",
         type: "特殊",
-        power: 50,
-        effect: "damage",
-        description: "広範囲の敵に攻撃。必ず命中する。",
+        power: 80,
+        effect: "damage_falloff_by_target_count",
+        description: "広範囲の敵に攻撃。対象が多いほど威力が下がる。",
         targeting: {
             type: "move_range",
             targetCount: "all",
@@ -161,19 +161,6 @@ const skillDatabase = [
         }
     },
     {
-        /*
-         * [重複IDバグ修正]
-         * 元データではこの技も id: 1 になっており、
-         * 先頭の「カンチョー」(id:1)と衝突していました。
-         * getSkill()はArray.find()で最初に見つかった方（カンチョー）を
-         * 返すため、この「貫・チョー」はどのキャラクターにも
-         * 割り当てようがない状態でした（デッドコード化していました）。
-         * 未使用のID 13を新たに割り当てています。
-         *
-         * まだどのキャラクターのcharacterSkillsDatabaseにも
-         * 追加していません。使わせたいキャラクターが決まったら
-         * characterSkillsDatabase側にIDを追加してください。
-         */
         id: 13,
         name: "貫・チョー",
         type: "物理",
@@ -194,7 +181,7 @@ const characterSkillsDatabase = {
     1: [1, 2, 4, 5], // デスリオン
     2: [1, 3, 7, 8], // 清武
     3: [1, 3, 7, 10], // 桃子
-    4: [1, 5, 6, 7], // りおん
+    4: [1, 5, 6, 13], // りおん
     5: [1, 5, 7, 8], // 武
     6: [1, 5, 6, 11], // VOLCANO MAN
     7: [1, 5, 6, 9], // 割り箸工場のおじさん
