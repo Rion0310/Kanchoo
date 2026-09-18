@@ -430,7 +430,21 @@ function connectOnlineBattle() {
 
             const assignedPlayerNumber = Number(message.playerNumber);
 
-            if (assignedPlayerNumber === 1 || assignedPlayerNumber === 2) {
+            /*
+             * [BUGFIX / 4人対戦対応漏れ]
+             * サーバー(room_connected)が返してくる自分の本当のプレイヤー番号は
+             * 1〜4のどれでもあり得るのに、以前は「1か2ならMY_PLAYER_NUMBERを
+             * 上書きする」処理しかなく、3・4番の場合はここで一切補正されず
+             * URLパラメータ由来の値がそのまま残っていた。
+             * 通常はROOM側が正しい?player=の値を付けて遷移させるため
+             * 表面化しにくいが、念のためサーバー側の判定を必ず信用するように
+             * 1〜4すべてで補正する。
+             */
+            if (
+                Number.isInteger(assignedPlayerNumber) &&
+                assignedPlayerNumber >= 1 &&
+                assignedPlayerNumber <= 4
+            ) {
                 MY_PLAYER_NUMBER = assignedPlayerNumber;
                 updateBoardPerspective();
             } else if (assignedPlayerNumber === 0) {
@@ -631,7 +645,17 @@ let lastYourTurnKey = null;
 
 function showYourTurnCutIn() {
 
-    if (Number(MY_PLAYER_NUMBER) !== 1 && Number(MY_PLAYER_NUMBER) !== 2) {
+    /*
+     * [BUGFIX / 4人対戦対応漏れ]
+     * 以前は2人対戦専用に「MY_PLAYER_NUMBERが1か2以外なら何もしない」
+     * という早期returnが残っており、P3・P4には「YOUR TURN」演出が
+     * 一切表示されなかった。1〜4番すべてで表示されるようにする。
+     */
+    if (
+        !Number.isInteger(Number(MY_PLAYER_NUMBER)) ||
+        Number(MY_PLAYER_NUMBER) < 1 ||
+        Number(MY_PLAYER_NUMBER) > 4
+    ) {
         return;
     }
 

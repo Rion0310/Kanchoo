@@ -217,6 +217,14 @@ function sendBattleStart(room) {
         room.battleStarted = true;
         room.activePlayers = seatedIndexes.map(index => index + 1);
         room.expectedPlayer = room.activePlayers[0];
+    } else {
+        // [調査用ログ] 対戦開始後にもう一度呼ばれたことが分かるようにする。
+        // ここが出ても、上のガードによりexpectedPlayerはリセットされない。
+        console.log(
+            `[sendBattleStart] room=${room.roomId} は既に開始済みのため` +
+            `activePlayers/expectedPlayerの再設定はスキップしました` +
+            `(現在のexpectedPlayer=${room.expectedPlayer})`
+        );
     }
 
     const payload = {
@@ -616,6 +624,21 @@ function handleMessage(socket, message) {
             Number(socket.playerNumber);
 
         if (sender !== room.expectedPlayer) {
+            /*
+             * [調査用ログ]
+             * 「PLAYER2の操作が他プレイヤーの画面に反映されない」件の
+             * 切り分け用に、誰かの操作がここで弾かれた場合は
+             * 必ずログへ残すようにする。想定通りに動いていれば、
+             * 自分の手番でない時にクライアントが誤って状態を送った
+             * 場合だけここに来るはずで、頻発するようであれば
+             * room.expectedPlayerの更新側(sendBattleStartや
+             * このハンドラの少し下)に問題が残っている。
+             */
+            console.warn(
+                `[battle_state 拒否] room=${room.roomId} ` +
+                `sender=${sender} expectedPlayer=${room.expectedPlayer} ` +
+                `incomingState.currentPlayer=${incomingState.currentPlayer}`
+            );
             return;
         }
 

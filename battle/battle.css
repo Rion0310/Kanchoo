@@ -511,6 +511,39 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 }
 
 
+/*
+ * [BUGFIX / HPバーの色がおかしい件]
+ *
+ * 以前はHPバーの色を「.player-status-1 .status-hp-fill」のように
+ * “どのスロット(画面上の位置)の中にあるか”で決めていた。
+ * しかし4人対戦対応で「自分を常に左下(スロット1)に固定する」
+ * 表示に変えたため、スロット1に実際に表示されるのは
+ * 自分がPLAYER2のときはPLAYER2のユニット、ということが起こりうる。
+ * その結果、スロットの位置だけで色を決めるこのルールだと
+ * 実際のプレイヤー番号と食い違った色のHPバーが表示されていた
+ * （例: PLAYER2視点でスロット1=自分のはずが青いHPバーになる等）。
+ *
+ * カード自身にはunit.playerに基づく「.player-1〜4」クラスが
+ * 既に付与されている(このすぐ上のborder-leftの色分けと同じ仕組み)ため、
+ * スロットではなくこちらを基準に色を決めるよう修正する。
+ */
+.character-status-card.player-1 .status-hp-fill {
+    background: #3b82f6;
+}
+
+.character-status-card.player-2 .status-hp-fill {
+    background: #ef4444;
+}
+
+.character-status-card.player-3 .status-hp-fill {
+    background: #eab308;
+}
+
+.character-status-card.player-4 .status-hp-fill {
+    background: #22c55e;
+}
+
+
 /* ========================================
    SELECTED CARD
 ======================================== */
@@ -630,17 +663,37 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 }
 
 
-.player-status-1
+/*
+ * [BUGFIX / HPバーの色と同じ理由でポートレート枠の色もおかしくなる件]
+ * こちらも「.player-status-1/2」というスロット(画面上の位置)基準では
+ * なく、カード自身が持つ実プレイヤー番号ベースの
+ * 「.player-1〜4」クラスを基準にする。3・4人目の色も追加した。
+ */
+.character-status-card.player-1
 .status-character-image {
 
     border-color: #315c9c;
 }
 
 
-.player-status-2
+.character-status-card.player-2
 .status-character-image {
 
     border-color: #9c3131;
+}
+
+
+.character-status-card.player-3
+.status-character-image {
+
+    border-color: #7c6412;
+}
+
+
+.character-status-card.player-4
+.status-character-image {
+
+    border-color: #16632c;
 }
 
 
@@ -743,16 +796,13 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 }
 
 
-.player-status-1
-.status-hp-fill {
-    background: #3b82f6;
-}
-
-
-.player-status-2
-.status-hp-fill {
-    background: #ef4444;
-}
+/*
+ * [BUGFIX / HPバーの色がおかしい件]
+ * 以前ここにあった「.player-status-1 .status-hp-fill」
+ * 「.player-status-2 .status-hp-fill」(スロット基準の色分け)は
+ * 削除した。理由は上の「.character-status-card.player-1〜4
+ * .status-hp-fill」(実際のプレイヤー番号基準の色分け)を参照。
+ */
 
 
 /* ========================================
