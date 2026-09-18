@@ -4,6 +4,7 @@ const skillDatabase = [
         name: "カンチョー",
         type: "物理",
         power: 80,
+        effect: "damage",
         description: "それぞれの流派でのカンチョーを繰り出す基本攻撃。",
         targeting: {
             type: "direction",
@@ -17,6 +18,7 @@ const skillDatabase = [
         name: "デスカンチョー",
         type: "物理",
         power: 999,
+        effect: "damage",
         description: "当たれば確実に相手を殺せるが、範囲が狭いうえに命中しにくい。",
         targeting: {
             type: "direction",
@@ -30,7 +32,7 @@ const skillDatabase = [
         name: "アライブカンチョー",
         type: "回復",
         power: 0,
-        effect: "revive",   // ★これを追加するだけ
+        effect: "revive",
         description: "移動可能範囲内の死体を一人、HPMAXで蘇らせる。",
         targeting: {
             type: "move_range",
@@ -43,12 +45,12 @@ const skillDatabase = [
         name: "デッドカンチョー",
         type: "物理",
         power: 0,
-        effect: "remove_dead",   // ★追加
+        effect: "remove_dead",
         description: "付近の敵の死体を消し去る。以後、生き返らせることはできない。",
         targeting: {
             type: "move_range",
             targetCount: "single",
-            targetSide: "dead_enemy"   // ★ "dead_ally" から変更
+            targetSide: "dead_enemy"
         }
     },
     {
@@ -56,6 +58,7 @@ const skillDatabase = [
         name: "銃チョー",
         type: "特殊",
         power: 50,
+        effect: "damage",
         description: "広範囲の敵に攻撃。必ず命中する。",
         targeting: {
             type: "move_range",
@@ -68,6 +71,7 @@ const skillDatabase = [
         name: "一刀入魂",
         type: "変化技",
         power: 0,
+        effect: "double_power_next_turn",
         description: "次ターンに放つ技の威力が倍になる。",
         targeting: {
             type: "self",
@@ -80,6 +84,7 @@ const skillDatabase = [
         name: "ヒールカンチョー",
         type: "変化技",
         power: 70,
+        effect: "heal_single_ally",
         description: "対象を回復。",
         targeting: {
             type: "move_range",
@@ -92,6 +97,7 @@ const skillDatabase = [
         name: "ドライブカンチョー",
         type: "変化技",
         power: 0,
+        effect: "move_buff_all_allies",
         description: "そのターンの間、すべての味方の移動範囲を1上げる。",
         targeting: {
             type: "all_map",
@@ -104,6 +110,7 @@ const skillDatabase = [
         name: "時差式カンチョー",
         type: "物理",
         power: 30,
+        effect: "damage_plus_true_damage",
         description: "二連で攻撃する。守るやケツ絞めを貫通する。",
         targeting: {
             type: "direction",
@@ -117,6 +124,7 @@ const skillDatabase = [
         name: "コンスタンチョー",
         type: "物理",
         power: 50,
+        effect: "damage_ignore_defense",
         description: "必ず定数のダメージを与える。",
         targeting: {
             type: "direction",
@@ -130,6 +138,7 @@ const skillDatabase = [
         name: "ケツ絞め",
         type: "変化技",
         power: 0,
+        effect: "guard_next_turn",
         description: "次ターンに受ける技の威力を半減する。",
         targeting: {
             type: "self",
@@ -142,6 +151,7 @@ const skillDatabase = [
         name: "リベレートカンチョー",
         type: "物理",
         power: 0,
+        effect: "equalize_hp_damage",
         description: "相手と自分のHPの差分が威力になる。自分のほうが高い場合失敗する。",
         targeting: {
             type: "direction",
@@ -151,10 +161,24 @@ const skillDatabase = [
         }
     },
     {
-        id: 1,
+        /*
+         * [重複IDバグ修正]
+         * 元データではこの技も id: 1 になっており、
+         * 先頭の「カンチョー」(id:1)と衝突していました。
+         * getSkill()はArray.find()で最初に見つかった方（カンチョー）を
+         * 返すため、この「貫・チョー」はどのキャラクターにも
+         * 割り当てようがない状態でした（デッドコード化していました）。
+         * 未使用のID 13を新たに割り当てています。
+         *
+         * まだどのキャラクターのcharacterSkillsDatabaseにも
+         * 追加していません。使わせたいキャラクターが決まったら
+         * characterSkillsDatabase側にIDを追加してください。
+         */
+        id: 13,
         name: "貫・チョー",
         type: "物理",
         power: 80,
+        effect: "damage_falloff_by_target_count",
         description: "前方一列に攻撃。対象が多いほど威力が下がる",
         targeting: {
             type: "direction",
