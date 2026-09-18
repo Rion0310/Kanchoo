@@ -3210,13 +3210,27 @@ function selectBluffType(unit, type) {
     );
 
     /*
-     * [BUGFIX / 連続使用不可]
-     * ブラフも「待機」と同じく技を使わない行動なので、
-     * 「前回使った技」の記録はここでリセットする（待機と同様）。
-     * ただしこの後で攻撃を選んだ場合は、executeSkill()側で
-     * 改めて使用した技のIDが記録される。
+     * [BUGFIX / ブラフを使った後だと同じ技を連続使用できてしまう件]
+     * 以前はここで unit.lastSkillId を即座にnullへリセットしていた。
+     * しかしブラフ選択はここで行動を終えるとは限らず、この直後に
+     * そのまま攻撃(技発動)へ進めるようになっている(下のコメント参照)。
+     * そのため「1 デスカンチョー → 2 ブラフ+デスカンチョー」のように
+     * ブラフを挟むだけで、直前に使った技をリセットしてから
+     * 同じ技をもう一度発動できてしまい、「連続使用不可」が
+     * 実質無効化されていた。
+     *
+     * ブラフ単体は技を使わない行動なので「前回使った技」の記録を
+     * 消してよいのは、この後さらに攻撃せず本当に行動を終えた場合
+     * (＝この後「待機」が選ばれた場合)だけでよい。その場合は
+     * waitUnit()側で改めてlastSkillIdがnullにリセットされるため、
+     * ここでの早すぎるリセットは不要かつ有害。
+     * ここを削除することで、
+     *   ・1 デスカンチョー → 2 ブラフのみ(待機で終了) → 3 デスカンチョー
+     *     は引き続き使用可能
+     *   ・1 デスカンチョー → 2 ブラフ+デスカンチョー(同ターン内で発動)
+     *     は正しくブロックされる
+     * という意図通りの挙動になる。
      */
-    unit.lastSkillId = null;
 
     /*
      * [ブラフと攻撃の両立]
@@ -5143,6 +5157,36 @@ function endTurn() {
     battleState.actionPhase =
         null;
 
+    /*
+     * [BUGFIX / 一ターン置いてもデスカンチョーが打てないことがある件]
+     * 一部のユニットを一度もクリックしないまま(＝waitUnit()も
+     * selectBluffType()も一度も通らないまま)TURN ENDした場合、
+     * そのユニットは今回「何もしなかった」のと同じはずなのに、
+     * lastSkillIdの更新・リセットのタイミングがwaitUnit/selectBluffType
+     * の2箇所にしかなかったため、記録が前回のまま残り続けていた。
+     *
+     * そのため、「1 デスカンチョー発動 → 2 このユニットには一切触れず
+     * TURN ENDだけ押す → 3 デスカンチョーを打とうとする」という、
+     * 体感的には1ターン分間を置いたはずの操作が、実際には
+     * 「連続使用」と同じ扱いになってブロックされ続けてしまっていた。
+     *
+     * movedUnitsをクリアする直前(＝今回のターンでの行動記録が
+     * まだ残っている最後のタイミング)に、今回一度も行動しなかった
+     * このプレイヤーの生存ユニットを洗い出し、waitUnit()と同じ扱いで
+     * lastSkillIdをリセットする。
+     */
+    const currentPlayerNumberForSkip = Number(battleState.currentPlayer);
+
+    battleState.units
+        .filter(
+            targetUnit =>
+                targetUnit.alive &&
+                Number(targetUnit.player) === currentPlayerNumberForSkip &&
+                !battleState.movedUnits.has(targetUnit.unitId)
+        )
+        .forEach(targetUnit => {
+            targetUnit.lastSkillId = null;
+        });
 
     battleState.movedUnits.clear();
 

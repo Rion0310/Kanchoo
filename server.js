@@ -372,6 +372,33 @@ function handleMessage(socket, message) {
             });
 
             broadcastRoom(room);
+
+            /*
+             * [BUGFIX / あとだしで観戦できない件]
+             * ROOM側(room.js)は"battle_start"メッセージを受信した
+             * 瞬間にしかbattle.htmlへ遷移しない。ところがsendBattleStart()は
+             * これまで「room_readyで対戦が始まった瞬間」と
+             * 「BATTLE画面からのbattle_join(再接続)」の2箇所からしか
+             * 呼ばれておらず、ROOM画面で"観戦卓"を選んだこの瞬間には
+             * 一切呼ばれていなかった。
+             *
+             * そのため、対戦がすでに始まった後でROOM画面から
+             * 観戦卓を選んでも、このソケットはroom.spectatorsに
+             * 登録される(＝観戦者一覧には表示される)だけで、
+             * battle_startを一度も受け取れずbattle.htmlへ
+             * 遷移できないまま固まっていた。
+             *
+             * すでに対戦が始まっている場合は、ここで明示的に
+             * sendBattleStart()を呼び、この観戦者にも(そして
+             * 念のため他の対戦者/観戦者にも再度)battle_startを
+             * 届けることで、選んだ直後にbattle.htmlへ遷移できるようにする。
+             * sendBattleStart()内のalreadyStartedガードにより
+             * activePlayers/expectedPlayerが巻き戻ることはない。
+             */
+            if (room.battleStarted) {
+                sendBattleStart(room);
+            }
+
             return;
         }
 
