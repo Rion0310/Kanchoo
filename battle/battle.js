@@ -8,6 +8,26 @@
 
 const BOARD_SIZE = 16;
 
+/*
+ * [FIELD SIZE / 保守性]
+ * 盤面のマス数はこの BOARD_SIZE 一つだけを変更すれば、
+ * ・盤面のマス数(createBoard)
+ * ・移動範囲や技の射程判定(BOARD_SIZEを参照する各関数)
+ * ・初期配置(getFormationPositions)
+ * ・城の位置(SIEGE_CASTLES)
+ * ・盤面のCSS(grid-template-columns/rows)
+ * ・右下の「N × N」ラベル
+ * が全て自動的に追従する。
+ *
+ * CSS側は :root の --board-size というカスタムプロパティを
+ * 参照しているため、ここで documentElement にその値を
+ * 書き込むことでCSSとJSの数値を一致させている。
+ */
+document.documentElement.style.setProperty(
+    "--board-size",
+    String(BOARD_SIZE)
+);
+
 const DATA =
     window.MONSTER_WAR_DATA;
 
@@ -713,8 +733,8 @@ function showYouLoseCutIn() {
 ======================================== */
 
 const SIEGE_CASTLES = {
-    1: { row: 16, column: 1 },
-    2: { row: 1, column: 16 }
+    1: { row: BOARD_SIZE, column: 1 },
+    2: { row: 1, column: BOARD_SIZE }
 };
 
 const battleState = {
@@ -1065,6 +1085,26 @@ function createBoard() {
                 column;
 
 
+            /*
+             * [CHECKER BOARD / 保守性]
+             * 以前はCSSの:nth-child(40n+...)で
+             * 20列固定の市松模様を再現していたが、
+             * BOARD_SIZEを変更すると列数がずれて
+             * 模様が壊れてしまっていた。
+             *
+             * (row + column) の偶奇でクラスを付与する方式にすることで、
+             * BOARD_SIZEがいくつであっても正しい市松模様になる。
+             */
+
+            if ((row + column) % 2 === 0) {
+
+                cell.classList.add(
+                    "alt-cell"
+                );
+
+            }
+
+
             cell.addEventListener(
                 "click",
                 () => {
@@ -1083,6 +1123,17 @@ function createBoard() {
             );
 
         }
+
+    }
+
+    /*
+     * 盤面右下の「N × N」表記もBOARD_SIZEから自動生成する
+     */
+
+    if (fieldArea) {
+
+        fieldArea.dataset.boardLabel =
+            `${BOARD_SIZE} × ${BOARD_SIZE}`;
 
     }
 
@@ -1567,125 +1618,163 @@ function renderUnitIcons() {
 
 
     /*
-     * 生存しているキャラだけ盤面へ配置
+     * 生存・死亡を問わず全ユニットを盤面へ配置する。
+     *
+     * 死亡したキャラも「そのマスにいた」というオブジェクトとして
+     * 盤面に残し、アイコンをグレーアウトして表示する
+     * （デッドカンチョーで削除されるまでは残り続ける）。
+     *
+     * 同じマスに死亡ユニットと生存ユニットが重なった場合に
+     * 生存側が必ず手前に見えるよう、
+     * 「死亡ユニット → 生存ユニット」の順で描画する。
      */
 
-    battleState.units
-        .filter(
-            unit =>
-                unit.alive
-        )
-        .forEach(
-            unit => {
+    const drawOrderUnits =
+        [...battleState.units].sort(
+            (a, b) =>
+                Number(a.alive) - Number(b.alive)
+        );
 
-                const cell =
-                    getCell(
-                        unit.row,
-                        unit.column
-                    );
+    drawOrderUnits.forEach(
+        unit => {
 
-
-                if (!cell) {
-                    return;
-                }
-
-
-                const icon =
-                    document.createElement(
-                        "img"
-                    );
-
-
-                icon.className =
-                    "board-unit-icon";
-
-
-                icon.src =
-                    unit.image;
-
-
-                icon.alt =
-                    "";
-
-
-                /*
-                 * アイコン自体はクリック判定を持たせない
-                 * → 下のマスをそのままクリックできる
-                 */
-
-                icon.style.position =
-                    "absolute";
-
-                icon.style.left =
-                    "50%";
-
-                icon.style.top =
-                    "50%";
-
-                icon.style.width =
-                    "82%";
-
-                icon.style.height =
-                    "82%";
-
-                icon.style.transform =
-                    "translate(-50%, -50%)";
-
-                icon.style.objectFit =
-                    "contain";
-
-                icon.style.pointerEvents =
-                    "none";
-
-                icon.style.userSelect =
-                    "none";
-
-                icon.style.zIndex =
-                    "2";
-
-
-                /*
-                 * 選択中のキャラだけ少し強調
-                 */
-
-                if (
-                    battleState.selectedUnitId ===
-                    unit.unitId
-                ) {
-
-                    icon.style.filter =
-                        "brightness(1.2)";
-
-                    icon.style.transform =
-                        "translate(-50%, -50%) scale(1.08)";
-
-                }
-
-
-                /*
-                 * PLAYERごとに薄い枠を追加
-                 */
-
-                icon.style.boxSizing =
-                    "border-box";
-
-
-                icon.style.border =
-                    unit.player === 1
-                        ? "2px solid rgba(59,130,246,0.8)"
-                        : "2px solid rgba(239,68,68,0.8)";
-
-
-                icon.style.borderRadius =
-                    "50%";
-
-
-                cell.appendChild(
-                    icon
+            const cell =
+                getCell(
+                    unit.row,
+                    unit.column
                 );
 
+
+            if (!cell) {
+                return;
             }
-        );
+
+
+            const icon =
+                document.createElement(
+                    "img"
+                );
+
+
+            icon.className =
+                unit.alive
+                    ? "board-unit-icon"
+                    : "board-unit-icon dead";
+
+
+            icon.src =
+                unit.image;
+
+
+            icon.alt =
+                "";
+
+
+            /*
+             * アイコン自体はクリック判定を持たせない
+             * → 下のマスをそのままクリックできる
+             */
+
+            icon.style.position =
+                "absolute";
+
+            icon.style.left =
+                "50%";
+
+            icon.style.top =
+                "50%";
+
+            icon.style.width =
+                "82%";
+
+            icon.style.height =
+                "82%";
+
+            icon.style.transform =
+                "translate(-50%, -50%)";
+
+            icon.style.objectFit =
+                "contain";
+
+            icon.style.pointerEvents =
+                "none";
+
+            icon.style.userSelect =
+                "none";
+
+            /*
+             * 死亡ユニットは生存ユニットの下に
+             * 表示されるよう、z-indexを一段低くする
+             */
+
+            icon.style.zIndex =
+                unit.alive
+                    ? "2"
+                    : "1";
+
+
+            /*
+             * 選択中のキャラだけ少し強調
+             * （死亡ユニットは選択できないため、常に生存ユニットのみ対象）
+             */
+
+            if (
+                unit.alive &&
+                battleState.selectedUnitId ===
+                unit.unitId
+            ) {
+
+                icon.style.filter =
+                    "brightness(1.2)";
+
+                icon.style.transform =
+                    "translate(-50%, -50%) scale(1.08)";
+
+            }
+
+
+            /*
+             * PLAYERごとに薄い枠を追加
+             */
+
+            icon.style.boxSizing =
+                "border-box";
+
+
+            icon.style.border =
+                unit.player === 1
+                    ? "2px solid rgba(59,130,246,0.8)"
+                    : "2px solid rgba(239,68,68,0.8)";
+
+
+            icon.style.borderRadius =
+                "50%";
+
+
+            /*
+             * 死亡ユニットのグレーアウト表示。
+             * filterはborder/box-shadowを含めた
+             * アイコン全体に一括で適用されるため、
+             * 枠線ごと自然にモノクロ化される。
+             */
+
+            if (!unit.alive) {
+
+                icon.style.filter =
+                    "grayscale(1) brightness(0.55)";
+
+                icon.style.opacity =
+                    "0.55";
+
+            }
+
+
+            cell.appendChild(
+                icon
+            );
+
+        }
+    );
 
 }
 
@@ -2627,6 +2716,28 @@ function getTargetUnitAtCell(row, column, targetSide, unit) {
             : null;
     }
 
+    /*
+     * [ALIVE / DEAD KANCHOO用に追加]
+     * 敵の死体だけを対象にしたい技用。
+     */
+    if (targetSide === "dead_enemy") {
+        const deadUnit = getDeadUnitAt(row, column);
+
+        return deadUnit && deadUnit.player !== unit.player
+            ? deadUnit
+            : null;
+    }
+
+    /*
+     * [ALIVE / DEAD KANCHOO用に追加]
+     * 自軍・敵軍を問わず、死体であれば対象にできる技用。
+     * 「デッドカンチョー」は基本的にこれを使う想定
+     * （敵味方どちらの死体もマップから消せるようにするため）。
+     */
+    if (targetSide === "dead_any") {
+        return getDeadUnitAt(row, column) || null;
+    }
+
     const target = getUnitAt(row, column);
 
     if (!target) {
@@ -3384,21 +3495,173 @@ function removeTarget(target) {
     }
 }
 
-function applySkillEffect(
+/* ========================================
+   SKILL EFFECT REGISTRY
+
+   [保守性についての回答 / Q3]
+   これまでは switch (skill.id) というように、
+   「技のID(数字)」ごとに直接効果をハードコードしていた。
+   そのため、skillDatabase に新しい技を追加しても、
+   ここに対応する case を書き足さない限りその技は
+   何も起きない(=DBに追加するだけでは自動的に
+   使えるようにはならない) という状態だった。
+
+   ここでは skill.effect という文字列
+   (例: "damage" "revive" "remove_dead" など)を見て
+   SKILL_EFFECTS から処理を引く方式に変更した。
+
+   既存の12技はDB側にeffectフィールドを持たないため、
+   これまでどおり applySkillEffectByLegacyId() の
+   switch(skill.id) がそのまま処理する
+   （挙動は一切変更していない）。
+
+   これからは、
+     1. skillDatabase の技定義に effect: "revive" のように
+        1行足すだけで、
+     2. その effect が既に SKILL_EFFECTS にある種類
+        （ダメージ・回復・蘇生・削除・ガード等）であれば
+        battle.js を一切編集せずにその技が動く。
+     3. 本当に新しい種類の効果が必要な時だけ、
+        SKILL_EFFECTS に1関数追加すればよい。
+   という形になり、「DBに追加したら自動で使えるか」への
+   答えがYESに近づく。
+======================================== */
+
+const SKILL_EFFECTS = {
+
+    // 敵へ通常ダメージ（旧: id 1, 2, 5）
+    damage: (unit, skill, { enemies }, multiplier) => {
+        applyDamageToTargets(unit, enemies, skill, multiplier);
+    },
+
+    // 防御力を無視したダメージ（旧: id 10）
+    damage_ignore_defense: (unit, skill, { enemies }, multiplier) => {
+        applyDamageToTargets(unit, enemies, skill, multiplier, true);
+    },
+
+    // 通常ダメージ + 追加の防御無視固定ダメージ（旧: id 9）
+    damage_plus_true_damage: (unit, skill, { enemies }, multiplier) => {
+        applyDamageToTargets(unit, enemies, skill, multiplier);
+
+        enemies.forEach(target => {
+            if (target.alive) {
+                applyDamage(
+                    unit,
+                    target,
+                    skill,
+                    Number(skill.power || 0) * multiplier,
+                    true
+                );
+            }
+        });
+    },
+
+    /*
+     * 味方の死亡ユニットを蘇生する（旧: id 3）。
+     *
+     * skill.power が指定されていれば従来どおりそのHPで蘇生し、
+     * 未指定(0 / null / undefined)の場合はそのユニットの
+     * maxHpで蘇生する＝HPMAX蘇生になる。
+     *
+     * → 「アライブカンチョー」はDB側で
+     *    effect: "revive" とし、power を省略（または0）にすれば
+     *    そのままHPMAX蘇生として動作する。
+     */
+    revive: (unit, skill, { deadTargets }) => {
+        const target = deadTargets.find(
+            candidate => candidate.player === unit.player
+        );
+
+        if (!target) {
+            return;
+        }
+
+        const revivePower =
+            Number(skill.power || 0) > 0
+                ? Number(skill.power)
+                : target.maxHp;
+
+        reviveTarget(target, revivePower);
+    },
+
+    /*
+     * 死亡ユニットをマップ上から完全に削除する（旧: id 4）。
+     *
+     * removeTarget() は battleState.units 配列から
+     * ユニットそのものを取り除くため、
+     * 以後 getDeadUnitAt() では二度と見つからなくなり、
+     * 結果として「蘇生することもできなくなる」を
+     * 自動的に満たす。
+     *
+     * targeting.targetSide を "dead_ally" ではなく
+     * "dead_any"（自軍・敵軍どちらの死体も対象にできる）に
+     * すれば、敵の死体にも使える「デッドカンチョー」になる。
+     */
+    remove_dead: (unit, skill, { deadTargets }) => {
+        deadTargets.forEach(target => {
+            removeTarget(target);
+        });
+    },
+
+    // 次に使う技の威力を一時的に上げる（旧: id 6）
+    double_power_next_turn: unit => {
+        unit.nextPowerMultiplier = 2;
+        unit.nextPowerTurn = battleState.turn + 1;
+    },
+
+    // 味方単体を回復（旧: id 7）
+    heal_single_ally: (unit, skill, { allies }) => {
+        healTargets(allies.slice(0, 1), Number(skill.power || 0));
+    },
+
+    // 自軍全体の移動力を上げる（旧: id 8）
+    move_buff_all_allies: unit => {
+        battleState.units
+            .filter(
+                target =>
+                    target.alive &&
+                    target.player === unit.player
+            )
+            .forEach(target => {
+                target.move += 2;
+            });
+    },
+
+    // 次に受けるダメージを軽減する（旧: id 11）
+    guard_next_turn: unit => {
+        unit.guardNextTurn = true;
+        unit.guardTurn = battleState.turn + 1;
+    },
+
+    // 自分と相手のHPを揃えるように防御無視ダメージを与える（旧: id 12）
+    equalize_hp_damage: (unit, skill, { enemies }) => {
+        enemies.forEach(target => {
+            if (unit.hp <= target.hp) {
+                applyDamage(
+                    unit,
+                    target,
+                    skill,
+                    target.hp - unit.hp,
+                    true
+                );
+            }
+        });
+    }
+
+};
+
+/*
+ * 既存12技のための後方互換レイヤー。
+ * skill.effect を持たない（＝現行DBのままの）技だけがここを通る。
+ * 中身はリファクタ前の switch (skill.id) と完全に同じで、
+ * 動作は一切変えていない。
+ */
+function applySkillEffectByLegacyId(
     unit,
     skill,
-    targets,
-    deadTargets,
+    { enemies, allies, deadTargets },
     multiplier
 ) {
-    const enemies = targets.filter(
-        target => target.player !== unit.player
-    );
-
-    const allies = targets.filter(
-        target => target.player === unit.player
-    );
-
     switch (skill.id) {
         case 1:
         case 2:
@@ -3506,6 +3769,60 @@ function applySkillEffect(
             });
             break;
     }
+}
+
+function applySkillEffect(
+    unit,
+    skill,
+    targets,
+    deadTargets,
+    multiplier
+) {
+    const enemies = targets.filter(
+        target => target.player !== unit.player
+    );
+
+    const allies = targets.filter(
+        target => target.player === unit.player
+    );
+
+    const context = { enemies, allies, deadTargets };
+
+    /*
+     * skill.effect が設定されている技は新方式で処理する。
+     * 既存の12技はこのフィールドを持たないため、
+     * 今まで通り下の後方互換switchに流れ、挙動は変わらない。
+     */
+    if (skill.effect) {
+
+        const handler =
+            SKILL_EFFECTS[skill.effect];
+
+        if (!handler) {
+
+            console.error(
+                `未定義のskill.effectです: skill.id=${skill.id}, ` +
+                `effect="${skill.effect}"。` +
+                `SKILL_EFFECTSに対応する関数を追加するか、` +
+                `game-data.jsのeffect名を見直してください。`
+            );
+
+            return;
+
+        }
+
+        handler(unit, skill, context, multiplier);
+
+        return;
+
+    }
+
+    applySkillEffectByLegacyId(
+        unit,
+        skill,
+        context,
+        multiplier
+    );
 }
 
 function executeSkill(

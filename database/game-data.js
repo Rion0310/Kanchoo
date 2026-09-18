@@ -30,7 +30,8 @@ const skillDatabase = [
         name: "アライブカンチョー",
         type: "回復",
         power: 0,
-        description: "移動可能範囲内の死体を一人蘇らせる。",
+        effect: "revive",   // ★これを追加するだけ
+        description: "移動可能範囲内の死体を一人、HPMAXで蘇らせる。",
         targeting: {
             type: "move_range",
             targetCount: "single",
@@ -42,11 +43,12 @@ const skillDatabase = [
         name: "デッドカンチョー",
         type: "物理",
         power: 0,
-        description: "付近に死体がある場合に有効。アライブできなくなり、死体も消える。",
+        effect: "remove_dead",   // ★追加
+        description: "付近の敵の死体を消し去る。以後、生き返らせることはできない。",
         targeting: {
             type: "move_range",
             targetCount: "single",
-            targetSide: "dead_ally"
+            targetSide: "dead_enemy"   // ★ "dead_ally" から変更
         }
     },
     {

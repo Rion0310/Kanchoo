@@ -1,8 +1,18 @@
 /* ========================================
    MONSTER WAR
    BATTLE FIELD
-   20 × 20
+
+   盤面のマス数は battle.js の BOARD_SIZE 定数だけで
+   決まる。JS が --board-size カスタムプロパティに
+   BOARD_SIZE の値を書き込み、このファイルはそれを
+   参照するだけなので、CSS 側を編集する必要はない。
 ======================================== */
+
+:root {
+    /* battle.js が起動時に実際の値で上書きする。
+       これはあくまでフォールバック値。 */
+    --board-size: 16;
+}
 
 * {
     box-sizing: border-box;
@@ -659,11 +669,17 @@ body {
 
     display: grid;
 
+    /*
+     * [FIELD SIZE / 保守性]
+     * --board-size は battle.js の BOARD_SIZE から
+     * 自動的に書き込まれるカスタムプロパティ。
+     * ここを直接書き換える必要はない。
+     */
     grid-template-columns:
-        repeat(20, minmax(0, 1fr));
+        repeat(var(--board-size), minmax(0, 1fr));
 
     grid-template-rows:
-        repeat(20, minmax(0, 1fr));
+        repeat(var(--board-size), minmax(0, 1fr));
 }
 
 
@@ -692,29 +708,20 @@ body {
 
 /* ========================================
    CHECKER BOARD
+
+   以前は :nth-child(40n + ...) で「20列固定」を
+   前提にした市松模様を再現していたが、
+   BOARD_SIZEを変えると列数がずれて模様が崩れる上、
+   実は20が偶数のため縦縞にしかならないという
+   不具合も併発していた。
+
+   現在は battle.js の createBoard() が
+   (row + column) の偶奇でこの .alt-cell クラスを
+   付与しており、BOARD_SIZEがいくつでも
+   正しい市松模様になる。
 ======================================== */
 
-.board-cell:nth-child(40n + 1),
-.board-cell:nth-child(40n + 3),
-.board-cell:nth-child(40n + 5),
-.board-cell:nth-child(40n + 7),
-.board-cell:nth-child(40n + 9),
-.board-cell:nth-child(40n + 11),
-.board-cell:nth-child(40n + 13),
-.board-cell:nth-child(40n + 15),
-.board-cell:nth-child(40n + 17),
-.board-cell:nth-child(40n + 19),
-.board-cell:nth-child(40n + 21),
-.board-cell:nth-child(40n + 23),
-.board-cell:nth-child(40n + 25),
-.board-cell:nth-child(40n + 27),
-.board-cell:nth-child(40n + 29),
-.board-cell:nth-child(40n + 31),
-.board-cell:nth-child(40n + 33),
-.board-cell:nth-child(40n + 35),
-.board-cell:nth-child(40n + 37),
-.board-cell:nth-child(40n + 39) {
-
+.board-cell.alt-cell {
     background: #181818;
 }
 
@@ -778,7 +785,12 @@ body {
 
 .field-area::after {
 
-    content: "20 × 20";
+    /*
+     * battle.js の createBoard() が
+     * fieldArea.dataset.boardLabel に "N × N" を
+     * 都度書き込むので、ここは常にそれを表示するだけでよい。
+     */
+    content: attr(data-board-label);
 
     position: absolute;
 
@@ -3490,131 +3502,22 @@ body {
 /* ============================================================
    MONSTER WAR - SIEGE BATTLE
    攻城戦
-   ============================================================ */
 
-/* 16 × 16盤面 */
-.battle-field {
-    grid-template-columns: repeat(16, minmax(0, 1fr)) !important;
-    grid-template-rows: repeat(16, minmax(0, 1fr)) !important;
-}
+   [保守性メモ]
+   このブロックはもともと同じ内容がほぼ丸ごと2回
+   コピペされており、さらに .battle-field と
+   .field-area::after を「16 × 16」に固定で
+   !important 上書きしていた。
+   BOARD_SIZEをJSで変更しても、ここが常に16に
+   固定し直してしまい、盤面サイズを変数一つで
+   変えられない最大の原因になっていたため、
+   重複を統合し、サイズ固定の上書きを削除した。
+   盤面のマス数・ラベルは通常の.battle-field /
+   .field-area::afterルール（--board-size /
+   data-board-label 経由）に一本化される。
+   ============================================================ */
 
 /* 城マス */
-.board-cell.siege-castle {
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background:
-        linear-gradient(
-            135deg,
-            rgba(255, 215, 90, 0.18),
-            rgba(120, 90, 25, 0.24)
-        ) !important;
-    box-shadow:
-        inset 0 0 0 2px rgba(220, 180, 70, 0.85),
-        inset 0 0 18px rgba(255, 190, 50, 0.22);
-}
-
-.board-cell.siege-castle::after {
-    display: none;
-}
-
-.castle-mark {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    user-select: none;
-    z-index: 1;
-}
-
-.castle-mark span {
-    color: #e7c86a;
-    font-size: clamp(8px, 1.3vw, 16px);
-    font-weight: 900;
-    line-height: 1;
-    text-shadow: 0 1px 4px #000;
-}
-
-.castle-mark small {
-    margin-top: 2px;
-    color: #a58f50;
-    font-size: clamp(4px, 0.55vw, 7px);
-    line-height: 1;
-    letter-spacing: 0.05em;
-}
-
-/* 自軍城・敵城を識別 */
-.board-cell.siege-castle[data-castle-owner="1"] {
-    border-color: rgba(59, 130, 246, 0.65);
-}
-
-.board-cell.siege-castle[data-castle-owner="2"] {
-    border-color: rgba(239, 68, 68, 0.65);
-}
-
-/* 勝敗表示 */
-.battle-result {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    text-align: center;
-}
-
-.battle-result-label {
-    color: #777777;
-    font-size: 8px;
-    letter-spacing: 0.16em;
-}
-
-.battle-result strong {
-    font-size: 15px;
-    letter-spacing: 0.08em;
-}
-
-.battle-result span {
-    color: #999999;
-    font-size: 8px;
-}
-
-/* 16×16表示 */
-.field-area::after {
-    content: "16 × 16";
-}
-
-/* 低い画面でも城表示を維持 */
-@media (max-height: 700px) {
-    .castle-mark span {
-        font-size: 9px;
-    }
-
-    .castle-mark small {
-        font-size: 4px;
-    }
-}
-
-
-/* ============================================================
-   MONSTER WAR - SIEGE BATTLE
-   ============================================================ */
-
-/* 攻城戦は16×16 */
-.battle-field {
-    grid-template-columns:
-        repeat(16, minmax(0, 1fr)) !important;
-
-    grid-template-rows:
-        repeat(16, minmax(0, 1fr)) !important;
-}
-
-/* 城 */
 .board-cell.siege-castle {
     z-index: 1;
 
@@ -3711,11 +3614,6 @@ body {
 .battle-result span {
     color: #999999;
     font-size: 8px;
-}
-
-/* 画面右下の盤面サイズ表記 */
-.field-area::after {
-    content: "16 × 16";
 }
 
 @media (max-height: 700px) {
