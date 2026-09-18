@@ -6,7 +6,17 @@
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 16;
+/*
+ * [1vs1限定サイズ変更]
+ * 2人対戦(1対1)の時だけ盤面を12×12に縮小し、3〜4人対戦では
+ * 従来通り16×16のままにする。何人で対戦するかは
+ * ・オフライン(ホットシート): initialize()時点で判明(常に2人)
+ * ・オンライン: battle_start受信時点で判明(2〜4人)
+ * というように後から確定するため、BOARD_SIZEはconstではなくletにし、
+ * 人数が確定したタイミングで値を更新してからcreateBoard()を
+ * 呼び直すことで両方のケースに追従させる。
+ */
+let BOARD_SIZE = 16;
 
 /*
  * [FIELD SIZE / 保守性]
@@ -14,19 +24,26 @@ const BOARD_SIZE = 16;
  * ・盤面のマス数(createBoard)
  * ・移動範囲や技の射程判定(BOARD_SIZEを参照する各関数)
  * ・初期配置(getFormationPositions)
- * ・城の位置(SIEGE_CASTLES)
+ * ・城の位置(getSiegeCastles)
  * ・盤面のCSS(grid-template-columns/rows)
  * ・右下の「N × N」ラベル
  * が全て自動的に追従する。
  *
  * CSS側は :root の --board-size というカスタムプロパティを
- * 参照しているため、ここで documentElement にその値を
- * 書き込むことでCSSとJSの数値を一致させている。
+ * 参照しているため、BOARD_SIZEが変わるたびに
+ * applyBoardSizeCssVariable()でdocumentElementへ書き込み、
+ * CSSとJSの数値を一致させている。
  */
-document.documentElement.style.setProperty(
-    "--board-size",
-    String(BOARD_SIZE)
-);
+function getBoardSizeForPlayerCount(playerCount) {
+    return Number(playerCount) <= 2 ? 12 : 16;
+}
+
+function applyBoardSizeCssVariable() {
+    document.documentElement.style.setProperty(
+        "--board-size",
+        String(BOARD_SIZE)
+    );
+}
 
 const DATA =
     window.MONSTER_WAR_DATA;
@@ -528,6 +545,15 @@ function connectOnlineBattle() {
             battleState.turn = 1;
 
             /*
+             * [1vs1限定サイズ変更]
+             * 接続直後(initialize())の時点ではまだ何人で対戦するか
+             * 分からず、暫定的に2人対戦(12×12)として盤面を作っていた。
+             * ここで実際の参加人数が確定するので、必要ならBOARD_SIZEを
+             * 16に更新し、下のcreateBoard()で盤面ごと作り直す。
+             */
+            BOARD_SIZE = getBoardSizeForPlayerCount(battleState.activePlayers.length);
+
+            /*
              * [PARTY FIX 4: battle_startのpartyを唯一の初期値にする]
              *
              * サーバーのroom_readyで確定したpartyを受け取り、
@@ -560,7 +586,10 @@ function connectOnlineBattle() {
             onlineBattleStarted = true;
 
             createUnits();
-            renderCastles();
+            // BOARD_SIZEが変わっていてもいなくても、createBoard()が
+            // 盤面の再構築・CSS変数の同期・城の再配置(renderCastles())
+            // まで一括で行う。
+            createBoard();
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
@@ -1049,13 +1078,20 @@ function getPlayerColorRgba(player, alpha = 1) {
  * battleState.activePlayers（＝その対戦に実際に参加している人数分の
  * プレイヤー番号）を見て自動で絞り込む。
  * 2人対戦なら1・2番(対角2箇所)だけが使われる、以前と全く同じ配置になる。
+ *
+ * [1vs1限定サイズ変更]
+ * 以前はconstのオブジェクトとしてBOARD_SIZE(16)を1回だけ埋め込んでいたが、
+ * それだと後からBOARD_SIZEが12に変わっても城の位置が古い16のままズレて
+ * しまう。呼ばれるたびにその時点のBOARD_SIZEで座標を作り直す関数にした。
  */
-const SIEGE_CASTLES = {
-    1: { row: BOARD_SIZE, column: 1 },       // 左下
-    2: { row: 1, column: BOARD_SIZE },       // 右上
-    3: { row: 1, column: 1 },                // 左上
-    4: { row: BOARD_SIZE, column: BOARD_SIZE } // 右下
-};
+function getSiegeCastles() {
+    return {
+        1: { row: BOARD_SIZE, column: 1 },       // 左下
+        2: { row: 1, column: BOARD_SIZE },       // 右上
+        3: { row: 1, column: 1 },                // 左上
+        4: { row: BOARD_SIZE, column: BOARD_SIZE } // 右下
+    };
+}
 
 const battleState = {
 
@@ -1432,6 +1468,9 @@ function createBoard() {
         return;
     }
 
+    // [1vs1限定サイズ変更] CSS側の --board-size もBOARD_SIZEの現在値に合わせる。
+    applyBoardSizeCssVariable();
+
 
     battleField.innerHTML = "";
 
@@ -1552,7 +1591,7 @@ function getCell(
  * 「すでに脱落済みの城には反応しない」判定を行う）。
  */
 function getActiveCastles() {
-    return Object.entries(SIEGE_CASTLES)
+    return Object.entries(getSiegeCastles())
         .filter(
             ([player]) =>
                 battleState.activePlayers.includes(Number(player))
@@ -3164,9 +3203,6 @@ function selectBluffType(unit, type) {
 
     logFinalizedMovementIfAny(unit);
 
-    // ブラフを仕込んだこと自体は明示せず、通常の待機と同じログを表示する。
-    addBattleLog(`${unit.name}はその場で待機した！`);
-
     unit.bluffType = type;
 
     battleState.bluffUnits.add(
@@ -4409,6 +4445,49 @@ const SKILL_EFFECTS = {
                 );
             }
         });
+    },
+
+    /*
+     * このターン移動した距離に応じて威力が上がる（ジェットカンチョー）。
+     * 実装自体は上のdamage_scale_with_move_distance()関数にあったが、
+     * ここに登録されていなかったため、skillDatabase側でこのeffectを
+     * 指定してもSKILL_EFFECTS[skill.effect]がundefinedになり、
+     * コンソールにエラーが出るだけで何も起きていなかった。
+     * (加えてgame-data.js側は"amage_scale_with_move_distance"と
+     * 綴りが1文字欠けていたので、そちらも修正が必要)
+     */
+    damage_scale_with_move_distance,
+
+    /*
+     * 自爆する代わりに大ダメージを与える（神風カンチョー）。
+     * ・敵への威力は damage_falloff_by_target_count と同じ考え方で、
+     *   対象が多いほど1体あたりの威力を下げる(multiplier / enemies.length)。
+     * ・その後、発動した本人を戦闘不能にする(自爆)。
+     *   applyDamage()を自分自身に対して呼ぶ形にはせず、直接HPを0にして
+     *   alive=falseにしている(ガード/ブラフ等の被弾処理を自爆に
+     *   巻き込みたくないため)。
+     * ・自爆によって参加人数が1人になる可能性があるので、
+     *   最後に必ずcheckVictoryCondition()を呼び直す。
+     */
+    kamikaze_damage: (unit, skill, { enemies }, multiplier) => {
+        if (enemies.length > 0) {
+            const falloffMultiplier = multiplier / enemies.length;
+
+            applyDamageToTargets(
+                unit,
+                enemies,
+                skill,
+                falloffMultiplier
+            );
+        }
+
+        if (unit.alive) {
+            unit.hp = 0;
+            unit.alive = false;
+            addBattleLog(`${unit.name}は自爆した！`);
+        }
+
+        checkVictoryCondition();
     }
 
 };
@@ -5411,6 +5490,16 @@ function updateControlPanel() {
 ======================================== */
 
 function initialize() {
+
+    /*
+     * [1vs1限定サイズ変更]
+     * オフライン(ホットシート)は常にactivePlayers=[1,2]の2人対戦、
+     * オンラインもbattle_start受信前はまだ人数不明でこの初期値のまま
+     * なので、いずれの場合も一旦「2人対戦」前提のサイズ(12)で作る。
+     * オンラインで実際に3〜4人対戦だった場合は、battle_start受信時に
+     * BOARD_SIZEを再計算してcreateBoard()を呼び直す。
+     */
+    BOARD_SIZE = getBoardSizeForPlayerCount(battleState.activePlayers.length);
 
     createBoard();
 

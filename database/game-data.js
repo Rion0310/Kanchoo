@@ -192,7 +192,7 @@ const skillDatabase = [
         id: 15,
         name: "ジェットカンチョー",
         power: 40,
-        effect: "amage_scale_with_move_distance",
+        effect: "damage_scale_with_move_distance",
         description: "助走をつけた分だけ威力が上がる",
         targeting: {
             type: "direction",
