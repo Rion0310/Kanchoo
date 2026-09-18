@@ -763,7 +763,14 @@ let characterSongAudio = null;
  */
 function playCharacterSong(characterId) {
 
-    const song = characterSongDatabase?.[characterId];
+    /*
+     * [DB統合 / 保守性]
+     * characterSongDatabaseは「id → 曲パス(文字列)」だけを持つ
+     * 形になった(以前は{path, title}のオブジェクトだったが、
+     * titleはほぼcharacter.nameの複製でしかなかったため廃止)。
+     * ログ表示用のラベルは、都度getCharacter()でキャラ名を引いて作る。
+     */
+    const songPath = characterSongDatabase?.[characterId];
 
     // [キャラソン復元] 「今流れているべき曲」をこのキャラのものにする。
     battleState.currentTrackCharacterId = characterId;
@@ -778,7 +785,7 @@ function playCharacterSong(characterId) {
      */
     stopAllBattleAudio();
 
-    const audio = new Audio(song?.path || "../audio/CanChoke.mp3");
+    const audio = new Audio(songPath || "../audio/CanChoke.mp3");
 
     audio.volume = 1.0;
 
@@ -788,7 +795,10 @@ function playCharacterSong(characterId) {
 
     characterSongAudio = audio;
 
-    const label = song?.title || "通常曲";
+    const label =
+        songPath
+            ? `${getCharacter(characterId)?.name || "?"}のテーマ`
+            : "通常曲";
 
     const tryPlay = () => {
         return audio.play().catch(error => {
@@ -1911,7 +1921,18 @@ function createUnit(
         // 次の行動では同じ技を連続使用できない
         lastSkillId: null,
 
-        bluffType: null
+        bluffType: null,
+
+        /*
+         * [BUGFIX / ドライブカンチョーの移動力がターンをまたいで
+         * 伸び続ける件]
+         * ドライブカンチョー(move_buff_all_allies)でmoveへ加算した
+         * 分をここに記録しておく。guardNextTurn等と同様、
+         * advanceToNextPlayer()で「このユニットの持ち主に
+         * 次の自分の手番が回ってきた瞬間」に、この量だけmoveを
+         * 差し引いて0に戻す。
+         */
+        moveBuffAmount: 0
 
     };
 
@@ -4427,7 +4448,20 @@ const SKILL_EFFECTS = {
         healTargets(allies.slice(0, 1), Number(skill.power || 0));
     },
 
-    // 自軍全体の移動力を上げる（旧: id 8）
+    /*
+     * 自軍全体の移動力を上げる（旧: id 8）
+     *
+     * [BUGFIX / ターンが変わった後も移動力が伸び続ける件]
+     * 以前はtarget.moveへ+2するだけで、失効させる処理が
+     * どこにも無かった。そのため一度使うと効果が永久に残り、
+     * もう一度使うとさらに+2され…と際限なく積み上がっていた。
+     *
+     * guard_next_turn(ケツ絞め)と同じ「自分の次の手番が来た瞬間に
+     * 失効」の方式にするため、加算した量をtarget.moveBuffAmountに
+     * 記録しておく。実際の失効処理はadvanceToNextPlayer()側で行う。
+     * (同じユニットに重ねて使った場合でも、加算した合計量を
+     * 覚えておくので過不足なく元に戻せる)
+     */
     move_buff_all_allies: unit => {
         battleState.units
             .filter(
@@ -4437,6 +4471,7 @@ const SKILL_EFFECTS = {
             )
             .forEach(target => {
                 target.move += 2;
+                target.moveBuffAmount = (target.moveBuffAmount || 0) + 2;
             });
     },
 
@@ -5098,11 +5133,19 @@ function advanceToNextPlayer() {
      * 手番が回ってきたプレイヤー自身の、まだ発動していない
      * ガード/ブラフをここで失効させる。
      * (使わずに温存されていた分は、自分の番が来た時点で切れる)
+     *
+     * [BUGFIX / ドライブカンチョーの移動力がターンをまたいで
+     * 伸び続ける件]
+     * ドライブカンチョーで加算したmoveも、ガード/ブラフと同じ
+     * タイミング(自分の次の手番が来た瞬間)で元に戻す。
+     * moveBuffAmountに「加算した合計量」を記録してあるので、
+     * それをそのまま差し引いて0にリセットする。
+     * (死亡していても記録上は加算されたままのため、生死を問わず
+     * 対象にする)
      */
     battleState.units
         .filter(
             targetUnit =>
-                targetUnit.alive &&
                 Number(targetUnit.player) === Number(battleState.currentPlayer)
         )
         .forEach(
@@ -5112,6 +5155,11 @@ function advanceToNextPlayer() {
                 if (targetUnit.bluffType) {
                     targetUnit.bluffType = null;
                     battleState.bluffUnits.delete(targetUnit.unitId);
+                }
+
+                if (targetUnit.moveBuffAmount) {
+                    targetUnit.move -= targetUnit.moveBuffAmount;
+                    targetUnit.moveBuffAmount = 0;
                 }
             }
         );
