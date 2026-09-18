@@ -1936,6 +1936,11 @@ function selectUnit(
     battleState.selectedUnitId =
         unit.unitId;
 
+    // このユニットが今回の行動を開始したので、
+    // 前回使用した技の「連続使用不可」をリセットする。
+    // これにより「1 攻撃 → 2 待機 → 3 攻撃」で
+    // 1と同じ技を3でも使用できる。
+    unit.lastSkillId = null;
 
     battleState.movableCells =
         getMovableCells(
