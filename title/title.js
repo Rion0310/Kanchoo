@@ -7,100 +7,31 @@
 // ========================================
 // キャラクターデータベース
 // ========================================
+//
+// [重複解消]
+// 以前はここに id/name/image だけの簡易版
+// titleCharacterDatabase を独自に持っていたが、
+// database/game-data.js の characterDatabase と
+// 実質同じデータの劣化コピーになっており、
+// キャラを追加・変更するたびに2箇所を直す必要がある
+// 保守性の問題があった。
+// title.html で ../database/game-data.js を
+// title.js より先に読み込むようにし、
+// window.MONSTER_WAR_DATA.characterDatabase を
+// そのまま参照する形に統一した。
 
-const titleCharacterDatabase = [
+const titleCharacterDatabase =
+    window.MONSTER_WAR_DATA
+        ? window.MONSTER_WAR_DATA.characterDatabase
+        : [];
 
-    {
-        id: 1,
-        name: "デスリオン",
-        image: "../images/deathrion.png"
-    },
+if (!window.MONSTER_WAR_DATA) {
 
-    {
-        id: 2,
-        name: "清武",
-        image: "../images/kiyotake.png"
-    },
+    console.error(
+        "MONSTER_WAR_DATA が読み込まれていません。title.html で ../database/game-data.js を title.js より先に読み込んでください。"
+    );
 
-    {
-        id: 3,
-        name: "桃子",
-        image: "../images/momoko.png"
-    },
-
-    {
-        id: 4,
-        name: "りおん",
-        image: "../images/rion.png"
-    },
-
-    {
-        id: 5,
-        name: "武",
-        image: "../images/takeshi.png"
-    },
-
-    {
-        id: 6,
-        name: "VOLCANO MAN",
-        image: "../images/volcano.png"
-    },
-
-    {
-        id: 7,
-        name: "割り箸工場のおじさん",
-        image: "../images/wariko.png"
-    },
-
-    {
-        id: 8,
-        name: "ゆうな",
-        image: "../images/yuuna.png"
-    },
-
-    {
-        id: 9,
-        name: "そらと",
-        image: "../images/sorato.jpg"
-    },
-
-    {
-        id: 10,
-        name: "しおん",
-        image: "../images/shion.png"
-    },
-
-    {
-        id: 11,
-        name: "フヂムラメイ",
-        image: "../images/mei.png"
-    },
-
-    {
-        id: 12,
-        name: "hasuo",
-        image: "../images/hasuo.png"
-    },
-
-    {
-        id: 13,
-        name: "きよし",
-        image: "../images/kiyoshi.png"
-    },
-
-    {
-        id: 14,
-        name: "大木克幸",
-        image: "../images/katsuyuki.png"
-    },
-
-    {
-        id: 15,
-        name: "某ミニマリスト",
-        image: "../images/tanuto.png"
-    }
-
-];
+}
 
 
 // ========================================
@@ -332,11 +263,27 @@ function renderTitleParty() {
 // ========================================
 // 「対戦する」
 // ========================================
+//
+// [BGM引き継ぎ]
+// location.hrefへ直接代入する代わりに、
+// ../shared/menu-bgm.js が用意するMenuBGM.navigateTo()を
+// 経由することで、遷移前に再生位置を保存してから移動する。
 
 function openBattle() {
 
-    window.location.href =
-        "../room/room.html";
+    if (window.MenuBGM) {
+
+        window.MenuBGM.navigateTo(
+            "../room/room.html"
+        );
+
+    }
+    else {
+
+        window.location.href =
+            "../room/room.html";
+
+    }
 
 }
 
@@ -347,8 +294,19 @@ function openBattle() {
 
 function openParty() {
 
-    window.location.href =
-        "../party/index.html";
+    if (window.MenuBGM) {
+
+        window.MenuBGM.navigateTo(
+            "../party/index.html"
+        );
+
+    }
+    else {
+
+        window.location.href =
+            "../party/index.html";
+
+    }
 
 }
 
@@ -394,91 +352,21 @@ function setupMenuButtons() {
 
 
 // ========================================
-// BGM
-// ========================================
-
-function setupBGM() {
-
-    const bgm =
-        document.getElementById(
-            "bgm"
-        );
-
-
-    // ====================================
-    // BGMがHTMLに存在しない場合
-    // ====================================
-
-    if (!bgm) {
-
-        return;
-
-    }
-
-
-    bgm.volume = 0.5;
-
-
-    // ====================================
-    // ページ読み込み時に再生
-    // ====================================
-
-    window.addEventListener(
-        "load",
-        () => {
-
-            bgm.play().catch(
-                () => {
-
-                    console.log(
-                        "自動再生がブロックされました。画面をクリックしてください。"
-                    );
-
-                }
-            );
-
-        }
-    );
-
-
-    // ====================================
-    // クリックで再生
-    // ====================================
-
-    document.addEventListener(
-        "click",
-        () => {
-
-            if (
-                bgm.paused
-            ) {
-
-                bgm.play().catch(
-                    () => {}
-                );
-
-            }
-
-        },
-        {
-            once: true
-        }
-    );
-
-}
-
-
-// ========================================
 // 初期化
 // ========================================
+//
+// [BGM]
+// 以前はここでsetupBGM()を呼んでいたが、
+// 再生・再開位置の引き継ぎも含めて
+// ../shared/menu-bgm.js に一本化したため撤去した。
+// title.htmlで<audio id="bgm">とmenu-bgm.jsを
+// 読み込んでいれば自動的に動作する。
 
 function initializeTitle() {
 
     renderTitleParty();
 
     setupMenuButtons();
-
-    setupBGM();
 
 }
 

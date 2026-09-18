@@ -1726,13 +1726,28 @@ body.multiplayer-3plus .player-status-2.slot-solo {
     }
 
 
-    .player-status-1 {
+    /*
+     * [UI配置修正 / 盤面の直下に来るように]
+     * battle-control-panel は元々.battle-layoutの外にあり、
+     * どのorderとも無関係に「全パネルの後」に表示されていたため、
+     * スマホでは盤面→各プレイヤーのパーティ表示→UIの順になり
+     * 操作しづらかった。battle.html側で.battle-layoutの中
+     * （field-areaの直後）に移動したうえで、ここでorder:2を
+     * 指定し、盤面(order:1)のすぐ下に来るようにする。
+     * 以降のプレイヤーパネルのorderはひとつずつ後ろにずらす。
+     */
+    .battle-control-panel {
         order: 2;
     }
 
 
-    .player-status-2 {
+    .player-status-1 {
         order: 3;
+    }
+
+
+    .player-status-2 {
+        order: 4;
     }
 
 
@@ -1773,12 +1788,12 @@ body.multiplayer-3plus .player-status-2.slot-solo {
      * 合わせて 自分(1)→2→4→3 の時計回りにする。
      */
     .player-status-4 {
-        order: 4;
+        order: 5;
     }
 
 
     .player-status-3 {
-        order: 5;
+        order: 6;
     }
 
 
@@ -1819,7 +1834,16 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 
     .battle-control-panel {
 
-        position: sticky;
+        /*
+         * [UI配置修正]
+         * 以前は.battle-layoutの外側で単独のフローに置かれていたため
+         * marginで自前の余白を作る必要があったが、今は.battle-layout
+         * (gap:10px)の一員になったため、gapが前後の間隔を管理する。
+         * position:stickyもtop/bottom未指定では実質static相当だが、
+         * 盤面とパーティ表示の"間"に挟まる要素になったので
+         * relativeに変更して意図を明確にする。
+         */
+        position: relative;
 
         left: auto;
         bottom: auto;
@@ -1829,8 +1853,7 @@ body.multiplayer-3plus .player-status-2.slot-solo {
         width:
             min(92vw, 500px);
 
-        margin:
-            0 auto 10px;
+        margin: 0 auto;
     }
 
 }

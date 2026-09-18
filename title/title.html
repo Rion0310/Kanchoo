@@ -12,7 +12,15 @@
 <main class="title-screen">
 
     <div class="title-content">
-        <audio src="../audio/CanChoke.mp3"></audio>
+        <!--
+            [BGM / ページをまたいでの再生継続]
+            以前はidが振られておらずtitle.js側のsetupBGM()が
+            何も見つけられず無音のままだった。
+            id="bgm" + loop を付け、../shared/menu-bgm.js が
+            room.html / party/index.html と共通の仕組みで
+            再生・再開位置の引き継ぎを行う。
+        -->
+        <audio id="bgm" src="../audio/CanChokeAcoustic.mp3" loop></audio>
         <h1 class="game-title">KANCHOO</h1>
 
         <div class="menu">
@@ -43,6 +51,8 @@
 </main>
 
 <script src="../shared/constants.js"></script>
+<script src="../database/game-data.js"></script>
+<script src="../shared/menu-bgm.js"></script>
 <script src="title.js"></script>
 
 </body>

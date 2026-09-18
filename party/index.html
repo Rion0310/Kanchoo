@@ -12,6 +12,12 @@
 
 <body>
 
+    <!--
+        [BGM / ページをまたいでの再生継続]
+        以前はこのページ単独でBGMを再生・管理していたが、
+        タイトル/ルームと共通の../shared/menu-bgm.jsに一本化した。
+        このタグ自体（id="bgm"）は変更なし。
+    -->
     <audio id="bgm" src="../audio/CanChoke.mp3" loop></audio>
     <div class="party-screen">
 
@@ -277,6 +283,7 @@
 
 
     <script src="../shared/constants.js"></script>
+    <script src="../shared/menu-bgm.js"></script>
     <script src="../database/game-data.js"></script>
     <script src="script.js"></script>
 

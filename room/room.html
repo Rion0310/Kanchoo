@@ -21,6 +21,14 @@
 
 <body>
 
+<!--
+    [BGM / ページをまたいでの再生継続]
+    title.html / party/index.html と同じ仕組み(../shared/menu-bgm.js)で
+    再生・再開位置を引き継ぐ。battle.htmlは専用BGMを持つため、
+    ここで鳴っている曲はBATTLE突入時に自然に止まる。
+-->
+<audio id="bgm" src="../audio/CanChoke.mp3" loop></audio>
+
 <main class="room-screen">
 
     <!-- ========================================
@@ -359,6 +367,7 @@
     ========================================= -->
 
     <script src="../shared/constants.js"></script>
+    <script src="../shared/menu-bgm.js"></script>
     <script src="room.js"></script>
 
 </main>
