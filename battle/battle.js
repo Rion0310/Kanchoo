@@ -58,16 +58,36 @@ const fieldArea =
     battleField ? battleField.closest(".field-area") : null;
 
 
-const player1Status =
-    document.getElementById(
-        "player-1-status"
-    );
-
-
-const player2Status =
-    document.getElementById(
-        "player-2-status"
-    );
+/*
+ * [4人対戦対応]
+ * 以前はplayer1Status/player2Statusの2つの定数だけだったが、
+ * スロット1〜4(自分を左下に固定した視点上の位置)を
+ * まとめて参照できるようにした。
+ * どの「実プレイヤー番号」をどのスロットに表示するかは
+ * getVisualSlotAssignments()が対戦のたびに動的に決める。
+ */
+const PLAYER_PANEL_SLOTS = {
+    1: {
+        panel: document.querySelector(".player-status-1"),
+        name: document.getElementById("player-1-name"),
+        list: document.getElementById("player-1-status")
+    },
+    2: {
+        panel: document.querySelector(".player-status-2"),
+        name: document.getElementById("player-2-name"),
+        list: document.getElementById("player-2-status")
+    },
+    3: {
+        panel: document.querySelector(".player-status-3"),
+        name: document.getElementById("player-3-name"),
+        list: document.getElementById("player-3-status")
+    },
+    4: {
+        panel: document.querySelector(".player-status-4"),
+        name: document.getElementById("player-4-name"),
+        list: document.getElementById("player-4-status")
+    }
+};
 
 
 /* ========================================
@@ -85,9 +105,22 @@ const IS_SPECTATOR =
     battleUrlParams.get("mode") === "spectator" ||
     battleUrlParams.get("player") === "spectator";
 
+/*
+ * [4人対戦対応]
+ * room.jsの ../battle/battle.html?player=N のNは1〜4になり得るので、
+ * 以前の「2以外は全部1」という決め打ちをやめ、1〜4の範囲だけ受け付ける。
+ */
+const REQUESTED_PLAYER_NUMBER = Number(battleUrlParams.get("player"));
+
 let MY_PLAYER_NUMBER = IS_SPECTATOR
     ? 0
-    : (Number(battleUrlParams.get("player")) === 2 ? 2 : 1);
+    : (
+        Number.isInteger(REQUESTED_PLAYER_NUMBER) &&
+        REQUESTED_PLAYER_NUMBER >= 1 &&
+        REQUESTED_PLAYER_NUMBER <= 4
+            ? REQUESTED_PLAYER_NUMBER
+            : 1
+    );
 
 const ONLINE_PLAYER_NAME =
     battleUrlParams.get("name") ||
@@ -135,11 +168,20 @@ function isSpectatorMode() {
 
 let onlineSocket = null;
 let onlineApplyingState = false;
-let onlineParty1 = null;
-let onlineParty2 = null;
+
+/*
+ * [4人対戦対応]
+ * 以前はonlineParty1/onlineParty2という2つの変数だったが、
+ * プレイヤー番号(1〜4)をキーにしたオブジェクトへ一本化した。
+ * 3人目・4人目が増えても、ここを増やす必要がない。
+ */
+let onlinePartyByPlayer = {};
+
 let onlinePlayerNames = {
     1: "PLAYER1",
-    2: "PLAYER2"
+    2: "PLAYER2",
+    3: "PLAYER3",
+    4: "PLAYER4"
 };
 let onlineBattleStarted = false;
 
@@ -157,6 +199,9 @@ function serializeBattleState() {
     return {
         turn: battleState.turn,
         currentPlayer: battleState.currentPlayer,
+        // [4人対戦対応] 参加人数・脱落者も同期する。
+        activePlayers: battleState.activePlayers,
+        eliminatedPlayers: battleState.eliminatedPlayers,
         selectedUnitId: battleState.selectedUnitId,
         movableCells: battleState.movableCells,
         units: battleState.units,
@@ -224,9 +269,21 @@ function applyOnlineState(state) {
     const previousTurn = battleState.turn;
     const previousPlayer = battleState.currentPlayer;
     const previousGameOver = battleState.gameOver;
+    const previousActivePlayersKey = battleState.activePlayers.join(",");
 
     battleState.turn = Number(state.turn || 1);
     battleState.currentPlayer = Number(state.currentPlayer || 1);
+
+    // [4人対戦対応] 参加人数・脱落者を同期する。
+    battleState.activePlayers =
+        Array.isArray(state.activePlayers) && state.activePlayers.length > 0
+            ? state.activePlayers.map(Number).filter(Number.isInteger)
+            : battleState.activePlayers;
+    battleState.eliminatedPlayers =
+        Array.isArray(state.eliminatedPlayers)
+            ? state.eliminatedPlayers.map(Number).filter(Number.isInteger)
+            : battleState.eliminatedPlayers;
+
     battleState.selectedUnitId = state.selectedUnitId ?? null;
     battleState.movableCells =
         Array.isArray(state.movableCells) ? state.movableCells : [];
@@ -252,7 +309,9 @@ function applyOnlineState(state) {
     if (state.playerNames && typeof state.playerNames === "object") {
         onlinePlayerNames = {
             1: String(state.playerNames[1] || "PLAYER1"),
-            2: String(state.playerNames[2] || "PLAYER2")
+            2: String(state.playerNames[2] || "PLAYER2"),
+            3: String(state.playerNames[3] || "PLAYER3"),
+            4: String(state.playerNames[4] || "PLAYER4")
         };
         updatePlayerNameHeaders();
     }
@@ -262,6 +321,12 @@ function applyOnlineState(state) {
         new Set(Array.isArray(state.bluffUnits) ? state.bluffUnits : []);
     battleState.bluffUses =
         state.bluffUses || battleState.bluffUses;
+
+    // 参加人数が変わっていれば(=試合開始直後やスペクテーター参加時など)
+    // 城の配置も現在のactivePlayersに合わせて描き直す。
+    if (battleState.activePlayers.join(",") !== previousActivePlayersKey) {
+        renderCastles();
+    }
 
     clearCellStates();
     renderUnitIcons();
@@ -290,30 +355,33 @@ function applyOnlineState(state) {
 }
 
 
+/*
+ * [4人対戦対応]
+ * 以前はPLAYER1/PLAYER2の名前欄へ固定で書き込むだけだったが、
+ * 今は「どの実プレイヤーがどのスロット(自分を左下に固定した視点)に
+ * 表示されるか」が対戦のたびに変わるため、名前の書き込みは
+ * renderPlayerPanels()に一本化した。
+ * (renderPlayerPanels()はbattleStateの初期化が終わってから
+ * 呼ばれる必要があるため、スクリプト読み込み直後には呼び出さない)
+ */
 function updatePlayerNameHeaders() {
-    const player1NameElement = document.getElementById("player-1-name");
-    const player2NameElement = document.getElementById("player-2-name");
-
-    if (player1NameElement) {
-        player1NameElement.textContent = getPlayerDisplayName(1);
-    }
-
-    if (player2NameElement) {
-        player2NameElement.textContent = getPlayerDisplayName(2);
-    }
+    renderPlayerPanels();
 }
 
 function getPlayerDisplayName(playerNumber) {
+    if (playerNumber === null || playerNumber === undefined) {
+        return "―";
+    }
+
     const number = Number(playerNumber);
 
-    if (number === 1 || number === 2) {
+    // [4人対戦対応] 1〜4番すべてで名前を引けるようにする。
+    if (number >= 1 && number <= 4) {
         return onlinePlayerNames[number] || `PLAYER${number}`;
     }
 
     return `PLAYER${number}`;
 }
-
-updatePlayerNameHeaders();
 
 function connectOnlineBattle() {
     if (!ONLINE_ROOM_ID) return;
@@ -401,12 +469,24 @@ function connectOnlineBattle() {
 
             const players = message.players || [];
 
-            const player1 = players.find(
-                player => Number(player.player) === 1
-            );
-            const player2 = players.find(
-                player => Number(player.player) === 2
-            );
+            /*
+             * [4人対戦対応 / 自動FIT]
+             * サーバー(server.js)は「実際に着席してREADYになった人数分」の
+             * players配列(2〜4件、プレイヤー番号は1〜4のいずれか)を送ってくる。
+             * その番号の並びをそのままactivePlayersとして採用することで、
+             * 手番のローテーション・城の配置・パネル表示すべてが
+             * この対戦の実際の参加人数に自動でFITする。
+             */
+            const activePlayers = players
+                .map(player => Number(player.player))
+                .filter(Number.isInteger)
+                .sort((a, b) => a - b);
+
+            battleState.activePlayers =
+                activePlayers.length > 0 ? activePlayers : [1, 2];
+            battleState.eliminatedPlayers = [];
+            battleState.currentPlayer = battleState.activePlayers[0];
+            battleState.turn = 1;
 
             /*
              * [PARTY FIX 4: battle_startのpartyを唯一の初期値にする]
@@ -414,27 +494,43 @@ function connectOnlineBattle() {
              * サーバーのroom_readyで確定したpartyを受け取り、
              * createUnits()より前に反映します。
              */
-            if (Array.isArray(player1?.party)) {
-                onlineParty1 = player1.party.map(Number).filter(Number.isFinite).slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
-            }
+            onlinePartyByPlayer = {};
+            const nextPlayerNames = { 1: "PLAYER1", 2: "PLAYER2", 3: "PLAYER3", 4: "PLAYER4" };
 
-            if (Array.isArray(player2?.party)) {
-                onlineParty2 = player2.party.map(Number).filter(Number.isFinite).slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
-            }
+            players.forEach(entry => {
+                const playerNumber = Number(entry.player);
 
-            onlinePlayerNames = {
-                1: String(player1?.name || "PLAYER1"),
-                2: String(player2?.name || "PLAYER2")
-            };
+                if (!Number.isInteger(playerNumber)) {
+                    return;
+                }
+
+                if (Array.isArray(entry.party)) {
+                    onlinePartyByPlayer[playerNumber] =
+                        entry.party
+                            .map(Number)
+                            .filter(Number.isFinite)
+                            .slice(0, window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE);
+                }
+
+                nextPlayerNames[playerNumber] = String(entry.name || `PLAYER${playerNumber}`);
+            });
+
+            onlinePlayerNames = nextPlayerNames;
             updatePlayerNameHeaders();
 
             onlineBattleStarted = true;
 
             createUnits();
+            renderCastles();
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
-            if (MY_PLAYER_NUMBER === 1 && !isSpectatorMode()) {
+
+            // 参加者の中で一番若い番号の人が最初の状態を送信する。
+            if (
+                !isSpectatorMode() &&
+                Number(MY_PLAYER_NUMBER) === battleState.activePlayers[0]
+            ) {
                 onlineSendState();
             }
             return;
@@ -729,12 +825,54 @@ function showYouLoseCutIn() {
 
 
 /* ========================================
+   PLAYER COLORS
+======================================== */
+
+/*
+ * [4人対戦対応 / 色分け]
+ * プレイヤーごとの色(青・赤・黄・緑)は shared/constants.js の
+ * PLAYER_COLORSただ一箇所で管理する。ここではその16進数カラーコードを
+ * 枠線やUIで使いやすいrgba()に変換するだけにしておき、
+ * 「誰が何色か」を複数箇所で決め打ちしないようにする。
+ */
+function hexToRgba(hex, alpha) {
+    const normalized = String(hex || "").replace("#", "");
+
+    const r = parseInt(normalized.slice(0, 2), 16) || 0;
+    const g = parseInt(normalized.slice(2, 4), 16) || 0;
+    const b = parseInt(normalized.slice(4, 6), 16) || 0;
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getPlayerColorHex(player) {
+    return (
+        window.MONSTER_WAR_CONSTANTS?.PLAYER_COLORS?.[Number(player)] ||
+        "#999999"
+    );
+}
+
+function getPlayerColorRgba(player, alpha = 1) {
+    return hexToRgba(getPlayerColorHex(player), alpha);
+}
+
+
+/* ========================================
    BATTLE STATE
 ======================================== */
 
+/*
+ * [4人対戦対応 / 盤面の自動FIT]
+ * 4隅すべての城を定義しておき、実際にどれを使うかは
+ * battleState.activePlayers（＝その対戦に実際に参加している人数分の
+ * プレイヤー番号）を見て自動で絞り込む。
+ * 2人対戦なら1・2番(対角2箇所)だけが使われる、以前と全く同じ配置になる。
+ */
 const SIEGE_CASTLES = {
-    1: { row: BOARD_SIZE, column: 1 },
-    2: { row: 1, column: BOARD_SIZE }
+    1: { row: BOARD_SIZE, column: 1 },       // 左下
+    2: { row: 1, column: BOARD_SIZE },       // 右上
+    3: { row: 1, column: 1 },                // 左上
+    4: { row: BOARD_SIZE, column: BOARD_SIZE } // 右下
 };
 
 const battleState = {
@@ -742,6 +880,26 @@ const battleState = {
     turn: 1,
 
     currentPlayer: 1,
+
+    /*
+     * [4人対戦対応]
+     * 実際にこの対戦へ参加しているプレイヤー番号の一覧(着席順)。
+     * オフライン対戦(ホットシート)では常に[1, 2]。
+     * オンライン対戦ではbattle_start受信時に、実際に着席していた
+     * 人数分(2〜4人)のプレイヤー番号へ差し替えられる。
+     * 手番のローテーション・城の自動配置・パネル表示すべてが
+     * この配列だけを基準に動く。
+     */
+    activePlayers: [1, 2],
+
+    /*
+     * 脱落済みのプレイヤー番号一覧。
+     * 城を落とされる、または自軍が全滅すると、そのプレイヤーだけが
+     * ここに追加されて手番ローテーションから外れる（対戦自体は続行）。
+     * activePlayers.length - eliminatedPlayers.length が1人になった時点で
+     * 対戦全体が終了する。
+     */
+    eliminatedPlayers: [],
 
     selectedUnitId: null,
 
@@ -779,7 +937,11 @@ const battleState = {
 
     bluffUnits: new Set(),
 
-    // プレイヤーごとに共有するブラフ使用回数
+    /*
+     * プレイヤーごとに共有するブラフ使用回数。
+     * [4人対戦対応] 3人目・4人目が参加しても使えるよう、
+     * 1〜4番すべてに用意しておく(2人対戦では3・4番は単に使われない)。
+     */
     bluffUses: {
         1: {
             ketsukacchin: 1,
@@ -787,6 +949,16 @@ const battleState = {
             dappunta: 1
         },
         2: {
+            ketsukacchin: 1,
+            ketsuiki: 1,
+            dappunta: 1
+        },
+        3: {
+            ketsukacchin: 1,
+            ketsuiki: 1,
+            dappunta: 1
+        },
+        4: {
             ketsukacchin: 1,
             ketsuiki: 1,
             dappunta: 1
@@ -1012,6 +1184,18 @@ function addBattleLog(message) {
    BOARD PERSPECTIVE
 ======================================== */
 
+/*
+ * [4人対戦対応 / 自分の陣地を常に左下に見せる]
+ * 以前はPLAYER2のときだけ180度反転(上下左右とも反転)していたが、
+ * PLAYER3(左上スタート)・PLAYER4(右下スタート)にも対応させた。
+ * ゲームデータ(行・列)自体は変更せず、CSS Gridの表示位置だけを
+ * 反転させている点は以前と同じ。
+ *
+ * PLAYER1: 反転なし(元々左下)
+ * PLAYER2: 上下・左右とも反転(元は右上)
+ * PLAYER3: 上下だけ反転(元は左上)
+ * PLAYER4: 左右だけ反転(元は右下)
+ */
 function updateBoardPerspective() {
 
     if (!battleField) {
@@ -1020,6 +1204,9 @@ function updateBoardPerspective() {
 
     const playerNumber = Number(MY_PLAYER_NUMBER);
 
+    const flipRow = playerNumber === 2 || playerNumber === 3;
+    const flipColumn = playerNumber === 2 || playerNumber === 4;
+
     battleField
         .querySelectorAll(".board-cell")
         .forEach(cell => {
@@ -1027,15 +1214,11 @@ function updateBoardPerspective() {
             const row = Number(cell.dataset.row);
             const column = Number(cell.dataset.column);
 
-            if (playerNumber === 2) {
-                // P2側ではP2の陣営が手前になるよう、
-                // ゲームデータを変更せず表示位置だけ180度反転します。
-                cell.style.gridRow = String(BOARD_SIZE - row + 1);
-                cell.style.gridColumn = String(BOARD_SIZE - column + 1);
-            } else {
-                cell.style.gridRow = String(row);
-                cell.style.gridColumn = String(column);
-            }
+            cell.style.gridRow =
+                String(flipRow ? BOARD_SIZE - row + 1 : row);
+
+            cell.style.gridColumn =
+                String(flipColumn ? BOARD_SIZE - column + 1 : column);
         });
 
 }
@@ -1161,12 +1344,29 @@ function getCell(
    SIEGE BATTLE
 ======================================== */
 
+/*
+ * [4人対戦対応 / 盤面の自動FIT]
+ * SIEGE_CASTLESには4隅すべてを定義してあるが、実際に「城」として
+ * 機能するのは今の対戦に参加しているプレイヤー(battleState.activePlayers)の
+ * 分だけ。脱落済みのプレイヤーの城は無効化しない
+ * （脱落後もそのマスへの侵入自体は特に意味を持たないので、
+ * getCastleAtの呼び出し側であるcheckCastleVictory側で
+ * 「すでに脱落済みの城には反応しない」判定を行う）。
+ */
+function getActiveCastles() {
+    return Object.entries(SIEGE_CASTLES)
+        .filter(
+            ([player]) =>
+                battleState.activePlayers.includes(Number(player))
+        )
+        .map(
+            ([player, castle]) => [Number(player), castle]
+        );
+}
+
 function getCastleAt(row, column) {
 
-    for (const player of [1, 2]) {
-
-        const castle =
-            SIEGE_CASTLES[player];
+    for (const [player, castle] of getActiveCastles()) {
 
         if (
             castle.row === row &&
@@ -1182,7 +1382,24 @@ function getCastleAt(row, column) {
 
 function renderCastles() {
 
-    Object.entries(SIEGE_CASTLES)
+    /*
+     * [4人対戦対応]
+     * オフライン既定の2人分でまず1回描画され、オンライン対戦では
+     * battle_start受信時に実際の参加人数(2〜4人)へ差し替えて
+     * 再度呼ばれる。再描画のたびに前回分の城マークを消してから
+     * 現在のactivePlayers分だけを描き直す。
+     */
+    battleField
+        ?.querySelectorAll(".board-cell.siege-castle")
+        .forEach(
+            cell => {
+                cell.classList.remove("siege-castle");
+                delete cell.dataset.castleOwner;
+                cell.innerHTML = "";
+            }
+        );
+
+    getActiveCastles()
         .forEach(
             ([player, castle]) => {
 
@@ -1224,10 +1441,15 @@ function showBattleResult(
     }
 
     battleState.gameOver = true;
-    battleState.winner = Number(winner);
+    // [4人対戦対応] 相討ちで全員脱落した場合はwinnerがnullになり得るので、
+    // Number(null)===0にならないようnull自体を保持する。
+    battleState.winner = winner === null || winner === undefined ? null : Number(winner);
     battleState.gameOverReason = String(reason || "");
 
-    if (Number(winner) !== Number(MY_PLAYER_NUMBER)) {
+    if (
+        battleState.winner !== null &&
+        Number(battleState.winner) !== Number(MY_PLAYER_NUMBER)
+    ) {
         showYouLoseCutIn();
     }
 
@@ -1242,43 +1464,14 @@ function showBattleResult(
     renderUnitIcons();
     renderPlayerPanels();
 
-    const panel =
-        document.getElementById(
-            "battle-control-panel"
-        );
-
-    if (panel) {
-
-        panel.innerHTML = `
-            <div class="battle-result">
-                <div class="battle-result-label">
-                    SIEGE BATTLE
-                </div>
-
-                <strong>
-                    ${getPlayerDisplayName(winner)} WIN
-                </strong>
-
-                <span>
-                    ${reason}
-                </span>
-
-                <button
-                    type="button"
-                    id="return-title-button"
-                    style="margin-top:18px;padding:12px 24px;cursor:pointer;"
-                >
-                    タイトルに戻る
-                </button>
-            </div>
-        `;
-    }
-
-    document
-        .getElementById("return-title-button")
-        ?.addEventListener("click", () => {
-            window.location.href = "/title/title.html";
-        });
+    /*
+     * 結果パネル（YOU LOSE表示・タイトルに戻るボタンを含む）の描画は
+     * updateControlPanel()側に一本化してある。
+     * こうすることで、勝敗をローカルで検知したクライアントだけでなく、
+     * applyOnlineState()経由でgameOverを受け取った側（＝敗者側や観戦者）でも
+     * 同じロジックで結果パネルが描画される。
+     */
+    updateControlPanel();
 
     // オンライン対戦では勝敗情報を含む最終状態を相手へ即時同期する。
     if (ONLINE_ROOM_ID && !onlineApplyingState) {
@@ -1287,43 +1480,96 @@ function showBattleResult(
 }
 
 
+/*
+ * [4人対戦対応 / 脱落方式]
+ * 以前は2人対戦専用で「どちらかが全滅したら即決着」だったが、
+ * 3〜4人対戦では「脱落した本人だけがその場で抜け、対戦は続行」という
+ * ルールになった。
+ *
+ * getActivePlayers()はまだ脱落していない参加プレイヤー番号を返す。
+ * 手番のローテーション(advanceToNextPlayer)もこれを基準に回すため、
+ * 脱落者は自動的に手番から外れる。
+ */
+function getActivePlayers() {
+    return battleState.activePlayers.filter(
+        player => !battleState.eliminatedPlayers.includes(player)
+    );
+}
+
+function eliminatePlayer(player, reason) {
+
+    if (
+        battleState.gameOver ||
+        battleState.eliminatedPlayers.includes(player)
+    ) {
+        return;
+    }
+
+    battleState.eliminatedPlayers.push(player);
+
+    /*
+     * 脱落したプレイヤーの残りユニットは、Task1で実装した
+     * 「死亡ユニットはマスに残したままグレーアウト」の仕組みを
+     * そのまま流用する形で、その場で全滅扱いにする。
+     */
+    battleState.units
+        .filter(
+            targetUnit =>
+                Number(targetUnit.player) === Number(player) &&
+                targetUnit.alive
+        )
+        .forEach(
+            targetUnit => {
+                targetUnit.hp = 0;
+                targetUnit.alive = false;
+            }
+        );
+
+    addBattleLog(
+        `${getPlayerDisplayName(player)}が脱落した！（${reason}）`
+    );
+
+    const remaining = getActivePlayers();
+
+    if (remaining.length <= 1) {
+        showBattleResult(
+            remaining[0] ?? null,
+            remaining.length === 1
+                ? `${getPlayerDisplayName(remaining[0])}以外が全員脱落`
+                : "全員脱落"
+        );
+    }
+}
+
 function checkVictoryCondition() {
 
     if (battleState.gameOver) {
         return true;
     }
 
-    const alive1 =
-        battleState.units.some(
-            unit =>
-                unit.player === 1 &&
-                unit.alive
-        );
+    /*
+     * まだ脱落していない参加プレイヤーのうち、
+     * 生存ユニットが1体もいない人をここで脱落させる。
+     * （eliminatePlayer内でgameOverになった場合はそこで対戦終了処理まで行われる）
+     */
+    getActivePlayers().forEach(
+        player => {
 
-    const alive2 =
-        battleState.units.some(
-            unit =>
-                unit.player === 2 &&
-                unit.alive
-        );
+            const hasAliveUnit =
+                battleState.units.some(
+                    targetUnit =>
+                        Number(targetUnit.player) === Number(player) &&
+                        targetUnit.alive
+                );
 
-    if (!alive1) {
-        showBattleResult(
-            2,
-            "PLAYER 1の全滅"
-        );
-        return true;
-    }
+            if (!hasAliveUnit) {
+                eliminatePlayer(player, "全滅");
+            }
 
-    if (!alive2) {
-        showBattleResult(
-            1,
-            "PLAYER 2の全滅"
-        );
-        return true;
-    }
+        }
+    );
 
-    return false;
+    return battleState.gameOver;
 }
 
 
@@ -1341,17 +1587,28 @@ function checkCastleVictory(unit) {
 
     if (
         castleOwner === null ||
-        castleOwner === unit.player
+        castleOwner === unit.player ||
+        battleState.eliminatedPlayers.includes(castleOwner)
     ) {
         return false;
     }
 
-    showBattleResult(
-        unit.player,
-        `${getPlayerDisplayName(unit.player)}が敵城へ侵入`
+    addBattleLog(
+        `${unit.name}が${getPlayerDisplayName(castleOwner)}の城へ侵入！`
     );
 
-    return true;
+    eliminatePlayer(
+        castleOwner,
+        `${getPlayerDisplayName(unit.player)}に城を落とされた`
+    );
+
+    /*
+     * 残りの参加者が1人になっていれば対戦全体の終了(gameOver)まで
+     * eliminatePlayer内で処理済み。まだ複数人残っていれば、
+     * このユニットは通常どおり行動選択フェーズへ進む
+     * （＝moveUnit()側に「即終了ではない」ことを伝えるためfalseを返す）。
+     */
+    return battleState.gameOver;
 }
 
 
@@ -1417,8 +1674,7 @@ function createUnit(
         // 次の行動では同じ技を連続使用できない
         lastSkillId: null,
 
-        bluffType: null,
-        bluffTurn: null
+        bluffType: null
 
     };
 
@@ -1436,8 +1692,13 @@ function getFormationPositions(
     /*
      * 攻城戦の初期配置
      * BOARD_SIZEに追従して、盤面外へ出ないようにする。
-     * PLAYER 2：右上の城をL字に囲む
+     *
+     * [4人対戦対応]
+     * 4隅すべてに、それぞれの城を囲むL字型の初期配置を用意した。
      * PLAYER 1：左下の城をL字に囲む
+     * PLAYER 2：右上の城をL字に囲む
+     * PLAYER 3：左上の城をL字に囲む
+     * PLAYER 4：右下の城をL字に囲む
      */
 
     if (player === 2) {
@@ -1448,6 +1709,28 @@ function getFormationPositions(
             { row: 1, column: BOARD_SIZE - 1 },
             { row: 1, column: BOARD_SIZE - 2 },
             { row: 1, column: BOARD_SIZE - 3 }
+        ];
+    }
+
+    if (player === 3) {
+        return [
+            { row: 2, column: 1 },
+            { row: 3, column: 1 },
+            { row: 4, column: 1 },
+            { row: 1, column: 2 },
+            { row: 1, column: 3 },
+            { row: 1, column: 4 }
+        ];
+    }
+
+    if (player === 4) {
+        return [
+            { row: BOARD_SIZE - 1, column: BOARD_SIZE },
+            { row: BOARD_SIZE - 2, column: BOARD_SIZE },
+            { row: BOARD_SIZE - 3, column: BOARD_SIZE },
+            { row: BOARD_SIZE, column: BOARD_SIZE - 1 },
+            { row: BOARD_SIZE, column: BOARD_SIZE - 2 },
+            { row: BOARD_SIZE, column: BOARD_SIZE - 3 }
         ];
     }
 
@@ -1471,27 +1754,29 @@ function createUnits() {
     battleState.units = [];
 
 
-    const players = [
-
-        {
+    /*
+     * [4人対戦対応]
+     * 以前はPLAYER1/PLAYER2の2人決め打ちだったが、
+     * battleState.activePlayers（実際にこの対戦に参加している
+     * プレイヤー番号、2〜4人）の分だけユニットを生成するようにした。
+     * オフライン対戦(ホットシート)ではactivePlayersが常に[1, 2]なので、
+     * 従来どおりPLAYER_1_PARTY/PLAYER_2_PARTYが使われる。
+     */
+    const players = battleState.activePlayers.map(
+        player => ({
+            player,
             party:
-                onlineParty2 ??
-                (ONLINE_ROOM_ID ? [] : PLAYER_2_PARTY),
-
-            player: 2
-
-        },
-
-        {
-            party:
-                onlineParty1 ??
-                (ONLINE_ROOM_ID ? [] : PLAYER_1_PARTY),
-
-            player: 1
-
-        }
-
-    ];
+                ONLINE_ROOM_ID
+                    ? (onlinePartyByPlayer[player] ?? [])
+                    : (
+                        player === 1
+                            ? PLAYER_1_PARTY
+                            : player === 2
+                                ? PLAYER_2_PARTY
+                                : []
+                    )
+        })
+    );
 
 
     players.forEach(
@@ -1735,6 +2020,8 @@ function renderUnitIcons() {
 
             /*
              * PLAYERごとに薄い枠を追加
+             * [4人対戦対応] 青/赤の2択だったのを、
+             * PLAYER_COLORS(青・赤・黄・緑)から引く方式に変更。
              */
 
             icon.style.boxSizing =
@@ -1742,9 +2029,7 @@ function renderUnitIcons() {
 
 
             icon.style.border =
-                unit.player === 1
-                    ? "2px solid rgba(59,130,246,0.8)"
-                    : "2px solid rgba(239,68,68,0.8)";
+                `2px solid ${getPlayerColorRgba(unit.player, 0.8)}`;
 
 
             icon.style.borderRadius =
@@ -2015,11 +2300,22 @@ function selectUnit(
     battleState.selectedUnitId =
         unit.unitId;
 
-    // このユニットが今回の行動を開始したので、
-    // 前回使用した技の「連続使用不可」をリセットする。
-    // これにより「1 攻撃 → 2 待機 → 3 攻撃」で
-    // 1と同じ技を3でも使用できる。
-    unit.lastSkillId = null;
+    /*
+     * [BUGFIX / 連続使用不可が機能していなかった件]
+     * 以前はここで unit.lastSkillId を毎回nullにリセットしていたが、
+     * これだと「前回使ったのと同じ技かどうか」を判定する直前に
+     * 毎回消してしまうことになり、制約が実質常に無効化されていた
+     * （このユニットを選び直すたびに前回の記録が消えるので、
+     * 直前に使った技が二度と技選択画面に反映されなかった）。
+     *
+     * 「連続使用不可」を機能させるには、ここでリセットしてはいけない。
+     * lastSkillId は
+     *   ・技を実際に発動したとき → その技のIDを記録（executeSkill内）
+     *   ・待機／ブラフを選んだとき → null にリセット（waitUnit/selectBluffType内）
+     * の2箇所だけで更新する。これにより
+     * 「1 攻撃 → 2 待機 → 3 攻撃」で1と同じ技を3でも使えるが、
+     * 「1 攻撃 → 2 攻撃（同じ技）」は正しくブロックされる。
+     */
 
     battleState.movableCells =
         getMovableCells(
@@ -2197,16 +2493,36 @@ function moveUnit(
     unit.column =
         column;
 
-    addBattleLog(
-        `${unit.name}が(${row},${column})へ移動した！`
-    );
-
+    /*
+     * [BUGFIX / 移動やり直しがログに逐次残ってしまう件]
+     * 以前はここで移動する度に必ずログを1行追加していたため、
+     * 「移動 → やり直す → 別の場所へ移動」を繰り返すたびに
+     * ログが際限なく増えていた（やり直して消えたはずの移動まで
+     * ログに残り続けてしまっていた）。
+     *
+     * 移動はまだ「やり直せる」段階なので、ここではログに残さない。
+     * 実際にログへ記録するのは、行動（技/待機/ブラフ）が確定して
+     * もう後戻りできなくなった時点＝finishUnitAction() の中でまとめて行う。
+     * これにより、何度やり直しても最終的な移動先が1回だけ記録される。
+     *
+     * 例外は下の敵城への突入（即時決着）。
+     * この場合はfinishUnitAction()を経由しないため、ここで記録する。
+     */
 
     /*
-     * 敵城へ到達した時点で即時勝利。
-     * 行動選択フェーズには進まない。
+     * [4人対戦対応]
+     * 敵城へ到達すると、その城の持ち主だけがその場で脱落する
+     * (checkCastleVictory内)。残りの参加者が1人になった場合のみ
+     * battleState.gameOverがtrueになり、ここで即座に行動選択フェーズを
+     * スキップして終了する。複数人がまだ残っている場合はfalseが返るため、
+     * このユニットは通常どおり下の行動選択フェーズへ進む。
      */
     if (checkCastleVictory(unit)) {
+
+        addBattleLog(
+            `${unit.name}が(${row},${column})へ移動した！`
+        );
+
         onlineSendState();
         return;
     }
@@ -2246,6 +2562,49 @@ function moveUnit(
     // 移動中はまだ相手へ同期しない。
     // 「移動 → 移動をやり直す」の途中経過を相手側へ送らず、
     // 行動確定時にだけ最終状態を同期する。
+
+}
+
+
+/*
+ * [BUGFIX / 移動やり直しがログに逐次残ってしまう件]
+ *
+ * 以前はmoveUnit()が呼ばれる度（＝移動する度）に必ず
+ * ログを1行追加しており、「移動 → やり直す → 別の場所へ移動」を
+ * 繰り返すたびにログが際限なく増えていた
+ * （やり直して無かったことになった移動まで、ログには残り続けていた）。
+ *
+ * 移動はundoMove()で取り消せる「まだ確定していない」状態なので、
+ * moveUnit()の時点ではログに残さないようにした。
+ * 代わりに、行動（技/待機/ブラフ）を確定させる
+ * waitUnit() / executeSkill() / selectBluffType() の先頭で
+ * この関数を呼び、「最終的にどこへ移動したか」を1回だけ記録する。
+ * 移動していれば(actionOriginRow/Columnと現在地が違えば)ログに残し、
+ * 結局移動しなかった（その場に留まった）場合は何も残さない。
+ */
+function logFinalizedMovementIfAny(unit) {
+
+    if (!unit) {
+        return;
+    }
+
+    if (
+        battleState.actionOriginRow === null ||
+        battleState.actionOriginColumn === null
+    ) {
+        return;
+    }
+
+    if (
+        unit.row === battleState.actionOriginRow &&
+        unit.column === battleState.actionOriginColumn
+    ) {
+        return;
+    }
+
+    addBattleLog(
+        `${unit.name}が(${unit.row},${unit.column})へ移動した！`
+    );
 
 }
 
@@ -2342,7 +2701,13 @@ function undoMove() {
         return;
     }
 
-    addBattleLog(`${unit.name}は移動をやり直した。`);
+    /*
+     * [BUGFIX / 移動やり直しがログに逐次残ってしまう件]
+     * やり直しは「なかったことにする」操作なので、
+     * ここではログに何も残さない。移動自体のログも
+     * moveUnit()側でもう出していないので、やり直しても
+     * ログには何も痕跡が残らなくなる。
+     */
 
     // 移動前の位置へ戻す
     unit.row = battleState.actionOriginRow;
@@ -2398,7 +2763,18 @@ function waitUnit() {
         return;
     }
 
+    logFinalizedMovementIfAny(unit);
+
     addBattleLog(`${unit.name}はその場で待機した！`);
+
+    /*
+     * [BUGFIX / 連続使用不可]
+     * 技を使わない行動(待機)を挟んだので、
+     * 「前回使った技」の記録はここでリセットする。
+     * これにより「1 攻撃 → 2 待機 → 3 攻撃」で
+     * 1と同じ技を3でも使えるようになる。
+     */
+    unit.lastSkillId = null;
 
     // 移動せず、その場にとどまって行動終了。
     battleState.movedUnits.add(unit.unitId);
@@ -2542,6 +2918,21 @@ function showBluffSelection(unit) {
 }
 
 
+/*
+ * [ガード/ブラフ／「自分の次のターンまで有効」の仕様]
+ *
+ * 以前は「PLAYER1/2のどちらが使ったか」から次に攻撃してくる
+ * turn番号を逆算して一致判定する(getNextOpponentTurnNumber)方式だったが、
+ * これは2人対戦専用のロジックで、3〜4人対戦のように手番が
+ * 複数人を経由して回ってくる場合には対応できなかった
+ * （自分の次の番が来るまでに何人分の攻撃を受けるか分からないため）。
+ *
+ * 今は「ターン番号が一致するか」ではなく「まだ発動していないか」だけを見る
+ * 状態ベースの判定にして、失効はadvanceToNextPlayer()側で
+ * 「自分の次の手番が来た瞬間」に行うようにした。
+ * これにより2〜4人のどの人数でも同じロジックで正しく動く。
+ */
+
 function selectBluffType(unit, type) {
 
     if (
@@ -2573,15 +2964,23 @@ function selectBluffType(unit, type) {
 
     playerBluffUses[type] = uses - 1;
 
+    logFinalizedMovementIfAny(unit);
+
     // ブラフを仕込んだこと自体は明示せず、通常の待機と同じログを表示する。
     addBattleLog(`${unit.name}はその場で待機した！`);
 
     unit.bluffType = type;
-    unit.bluffTurn = battleState.turn + 1;
 
     battleState.bluffUnits.add(
         unit.unitId
     );
+
+    /*
+     * [BUGFIX / 連続使用不可]
+     * ブラフも「待機」と同じく技を使わない行動なので、
+     * 「前回使った技」の記録はここでリセットする（待機と同様）。
+     */
+    unit.lastSkillId = null;
 
     finishUnitAction();
 }
@@ -3314,9 +3713,14 @@ function applyDamage(
         Number(damage) || 0
     );
 
-    const guardActive =
-        target.guardNextTurn &&
-        target.guardTurn === battleState.turn;
+    /*
+     * [ガード/ブラフ／「自分の次のターンまで有効」の仕様]
+     * 以前は「予約しておいたturn番号と一致するか」で判定していたが、
+     * 今は単に「まだ発動していないか(=trueのままか)」だけを見る。
+     * 自分の次の手番が来た時点での失効はadvanceToNextPlayer()が
+     * 別途行うので、ここでは状態のON/OFFだけを見ればよい。
+     */
+    const guardActive = !!target.guardNextTurn;
 
     if (guardActive && !ignoreDefense) {
         finalDamage = Math.floor(finalDamage / 2);
@@ -3324,8 +3728,7 @@ function applyDamage(
 
     const bluffActive =
         !ignoreBluff &&
-        target.bluffType &&
-        target.bluffTurn === battleState.turn;
+        !!target.bluffType;
 
     if (bluffActive) {
         const bluffNames = {
@@ -3340,7 +3743,7 @@ function applyDamage(
 
         if (
             target.bluffType === "ketsukacchin" &&
-            Number(skill?.id) !== 9
+            !skill?.piercesKetsukacchin
         ) {
             finalDamage = 0;
         }
@@ -3373,7 +3776,6 @@ function applyDamage(
         }
 
         target.bluffType = null;
-        target.bluffTurn = null;
         battleState.bluffUnits.delete(
             target.unitId
         );
@@ -3422,7 +3824,6 @@ function applyDamage(
 
     if (guardActive) {
         target.guardNextTurn = false;
-        target.guardTurn = null;
     }
 
     checkVictoryCondition();
@@ -3651,9 +4052,9 @@ const SKILL_EFFECTS = {
     },
 
     // 次に受けるダメージを軽減する（旧: id 11）
+    // 「自分の次のターンまで有効」の失効処理はadvanceToNextPlayer()側で行う。
     guard_next_turn: unit => {
         unit.guardNextTurn = true;
-        unit.guardTurn = battleState.turn + 1;
     },
 
     // 自分と相手のHPを揃えるように防御無視ダメージを与える（旧: id 12）
@@ -3759,6 +4160,8 @@ function executeSkill(
     const deadTargets =
         getDeadUnitsOnCells(targetCells);
 
+    logFinalizedMovementIfAny(unit);
+
     addBattleLog(
         `${unit.name}が${skill.name}を発動！`
     );
@@ -3812,12 +4215,9 @@ function createStatusCard(
         unit.unitId;
 
 
+    // [4人対戦対応] 青/赤の2択だったのを、そのままplayer-N(1〜4)にした。
     card.classList.add(
-
-        unit.player === 1
-            ? "player-1"
-            : "player-2"
-
+        `player-${unit.player}`
     );
 
 
@@ -3858,9 +4258,11 @@ function createStatusCard(
     if (
         battleState.bluffUnits.has(
             unit.unitId
-        )
+        ) &&
+        Number(unit.player) === Number(MY_PLAYER_NUMBER)
     ) {
 
+        // ブラフは自分のユニットにだけ見せる（相手には通常状態と区別させない）
         card.classList.add(
             "bluff"
         );
@@ -4011,7 +4413,8 @@ function createStatusCard(
         ${
             battleState.bluffUnits.has(
                 unit.unitId
-            )
+            ) &&
+            Number(unit.player) === Number(MY_PLAYER_NUMBER)
 
                 ? `
 
@@ -4063,81 +4466,150 @@ function createStatusCard(
    PLAYER STATUS PANELS
 ======================================== */
 
-function renderPlayerPanels() {
+/*
+ * [4人対戦対応 / 自分を左下に固定する視点]
+ *
+ * スロット番号(1〜4、画面上の位置)と実プレイヤー番号(1〜4、
+ * 誰が赤か青か)は今は別物になっている。
+ *
+ * スロットの画面上の位置は固定:
+ *   スロット1 = 左下 (2人対戦での唯一の自分側パネルと同じ位置)
+ *   スロット2 = 右下 (2人対戦での相手パネルと同じ位置)
+ *   スロット4 = 右上
+ *   スロット3 = 左上
+ *
+ * オンライン対戦では「自分(MY_PLAYER_NUMBER)」を必ずスロット1(左下)に
+ * 固定し、残りの参加者をスロット2→4→3の順(時計回り)に割り当てる。
+ * オフライン対戦(ホットシート)や観戦時は自分という視点がないので、
+ * activePlayersの並び順(着席順)をそのままスロット1から詰めていく。
+ * こうすると2人対戦の場合は常にスロット1=PLAYER1、スロット2=PLAYER2に
+ * なり、以前の見た目と完全に一致する。
+ */
+function getVisualSlotAssignments() {
 
-    if (player1Status) {
+    const slotOrder = [1, 2, 4, 3]; // 左下 → 右下 → 右上 → 左上(時計回り)
 
-        player1Status.innerHTML =
-            "";
+    const perspectivePlayer =
+        (!isSpectatorMode() && ONLINE_ROOM_ID) &&
+        battleState.activePlayers.includes(Number(MY_PLAYER_NUMBER))
+            ? Number(MY_PLAYER_NUMBER)
+            : battleState.activePlayers[0];
 
-    }
-
-
-    if (player2Status) {
-
-        player2Status.innerHTML =
-            "";
-
-    }
-
-
-    const player1Units =
-        battleState.units.filter(
-            unit =>
-                unit.player === 1
+    const others =
+        battleState.activePlayers.filter(
+            player => player !== perspectivePlayer
         );
 
+    const ordered =
+        battleState.activePlayers.includes(perspectivePlayer)
+            ? [perspectivePlayer, ...others]
+            : [...battleState.activePlayers];
 
-    const player2Units =
-        battleState.units.filter(
-            unit =>
-                unit.player === 2
-        );
+    const assignment = {};
 
-
-    player1Units.forEach(
-        unit => {
-
-            const card =
-                createStatusCard(
-                    unit
-                );
-
-
-            if (
-                card &&
-                player1Status
-            ) {
-
-                player1Status.appendChild(
-                    card
-                );
-
-            }
-
+    slotOrder.forEach(
+        (slotNumber, index) => {
+            assignment[slotNumber] = ordered[index] ?? null;
         }
     );
 
+    return assignment;
+}
 
-    player2Units.forEach(
-        unit => {
+function renderPlayerPanels() {
 
-            const card =
-                createStatusCard(
-                    unit
-                );
+    const assignment = getVisualSlotAssignments();
 
+    /*
+     * 3人目以降が参加している対戦かどうかで、bodyにクラスを付け外しする。
+     * battle.css側はこのクラスを見て、スロット1・2のパネルを
+     * 半分の高さにしてスロット3・4と上下に並べるレイアウトへ切り替える。
+     * 2人対戦のときはこのクラスが付かず、以前と全く同じ見た目になる。
+     */
+    document.body.classList.toggle(
+        "multiplayer-3plus",
+        battleState.activePlayers.length > 2
+    );
 
-            if (
-                card &&
-                player2Status
-            ) {
+    // スロット1(左下)はスロット3(左上)が空いていれば全高表示にする。
+    // スロット2(右下)も同様にスロット4(右上)基準で判定する。
+    const slotSoloMap = {
+        1: assignment[3] == null,
+        2: assignment[4] == null,
+        3: false,
+        4: false
+    };
 
-                player2Status.appendChild(
-                    card
-                );
+    [1, 2, 3, 4].forEach(
+        slotNumber => {
+
+            const elements = PLAYER_PANEL_SLOTS[slotNumber];
+
+            if (!elements || !elements.panel || !elements.list) {
+                return;
+            }
+
+            const player = assignment[slotNumber];
+
+            elements.panel.classList.toggle(
+                "slot-hidden",
+                player == null
+            );
+
+            elements.panel.classList.toggle(
+                "slot-solo",
+                !!slotSoloMap[slotNumber]
+            );
+
+            elements.list.innerHTML = "";
+
+            if (player == null) {
+
+                if (elements.name) {
+                    elements.name.textContent = "";
+                }
+
+                return;
 
             }
+
+            const colorHex = getPlayerColorHex(player);
+
+            elements.panel.style.borderColor = colorHex;
+
+            if (elements.name) {
+
+                elements.name.textContent =
+                    getPlayerDisplayName(player);
+
+                elements.name.style.color = colorHex;
+
+                elements.name.style.background =
+                    `linear-gradient(90deg, ${getPlayerColorRgba(player, 0.15)}, transparent)`;
+
+                elements.name.style.borderBottomColor = colorHex;
+
+            }
+
+            battleState.units
+                .filter(
+                    unit =>
+                        Number(unit.player) === Number(player)
+                )
+                .forEach(
+                    unit => {
+
+                        const card =
+                            createStatusCard(
+                                unit
+                            );
+
+                        if (card) {
+                            elements.list.appendChild(card);
+                        }
+
+                    }
+                );
 
         }
     );
@@ -4148,6 +4620,57 @@ function renderPlayerPanels() {
 /* ========================================
    END TURN
 ======================================== */
+
+/*
+ * [4人対戦対応 / 手番ローテーション]
+ * 以前は「PLAYER1⇔PLAYER2」の決め打ちの切り替えだったが、
+ * 2〜4人のうち脱落していない人だけを対象に、着席順(activePlayers)を
+ * ぐるぐる回すローテーションに変更した。脱落者は自然にスキップされる。
+ *
+ * ローテーションの先頭(一番若いプレイヤー番号)まで一周したら
+ * turnを1つ進める。以前の「PLAYER2→PLAYER1でturn++」も、
+ * 2人対戦の場合はこの「先頭に戻ったら」と完全に一致する。
+ */
+function advanceToNextPlayer() {
+
+    const active = getActivePlayers();
+
+    if (active.length === 0) {
+        return;
+    }
+
+    const currentIndex = active.indexOf(battleState.currentPlayer);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % active.length;
+
+    if (nextIndex === 0) {
+        battleState.turn++;
+    }
+
+    battleState.currentPlayer = active[nextIndex];
+
+    /*
+     * [ガード/ブラフ／「自分の次のターンまで有効」の失効処理]
+     * 手番が回ってきたプレイヤー自身の、まだ発動していない
+     * ガード/ブラフをここで失効させる。
+     * (使わずに温存されていた分は、自分の番が来た時点で切れる)
+     */
+    battleState.units
+        .filter(
+            targetUnit =>
+                targetUnit.alive &&
+                Number(targetUnit.player) === Number(battleState.currentPlayer)
+        )
+        .forEach(
+            targetUnit => {
+                targetUnit.guardNextTurn = false;
+
+                if (targetUnit.bluffType) {
+                    targetUnit.bluffType = null;
+                    battleState.bluffUnits.delete(targetUnit.unitId);
+                }
+            }
+        );
+}
 
 function endTurn() {
     if (isSpectatorMode()) return;
@@ -4196,32 +4719,20 @@ function endTurn() {
     clearCellStates();
 
 
-    if (
-        battleState.currentPlayer === 1
-    ) {
+    advanceToNextPlayer();
 
-        battleState.currentPlayer =
-            2;
-
-    } else {
-
-        battleState.currentPlayer =
-            1;
-
-        battleState.turn++;
-
-    }
-
-    // 「連続使用不可」は、次の自分のターンまでの制限。
-    // ターンが切り替わったら、新しく手番になったプレイヤーの
-    // 前回使用技をリセットして再使用できるようにする。
-    battleState.units
-        .filter(unit =>
-            Number(unit.player) === Number(battleState.currentPlayer)
-        )
-        .forEach(unit => {
-            unit.lastSkillId = null;
-        });
+    /*
+     * [BUGFIX / 連続使用不可が機能していなかった件]
+     * 以前はここで、手番が回ってきたプレイヤーの全ユニットの
+     * lastSkillIdを毎ターンnullにリセットしていた。
+     * これだと「前回使った技と同じか」を判定する直前
+     * （＝そのユニットが次に技を選ぶまさにその瞬間）に
+     * 必ず記録を消してしまうため、制約が常に無効化されていた。
+     *
+     * lastSkillIdのリセットは、待機／ブラフを選んだとき
+     * （waitUnit / selectBluffType）にのみ行う方式に変更したため、
+     * ここでの一括リセットは削除した。
+     */
 
     if (battleState.currentPlayer === Number(MY_PLAYER_NUMBER)) {
         showYourTurnCutIn();
@@ -4251,6 +4762,61 @@ function updateControlPanel() {
 
 
     if (!panel) {
+        return;
+    }
+
+    /*
+     * [BUGFIX / 敗北側でYOU LOSE表示とタイトルに戻るボタンが出ない件]
+     *
+     * 以前はこの結果パネルの描画がshowBattleResult()の中だけにあり、
+     * オンライン対戦で相手の勝利を検知したクライアント（＝勝者側）でしか
+     * 呼ばれていなかった。
+     * 敗者側はapplyOnlineState()経由でbattleState.gameOverを受け取るだけで、
+     * updateControlPanel()を呼ぶのみだったため、
+     * 下の「観戦者/相手ターンなら空にする」判定に引っかかって
+     * 結果パネルが一切描画されなかった（自分のターンでない限り）。
+     *
+     * 決着後は誰の手番かに関わらず結果パネルを最優先で描画するように、
+     * ここでgameOverを最初にチェックする。
+     */
+    if (battleState.gameOver) {
+
+        panel.style.display = "";
+
+        panel.innerHTML = `
+            <div class="battle-result">
+                <div class="battle-result-label">
+                    SIEGE BATTLE
+                </div>
+
+                <strong>
+                    ${
+                        battleState.winner === null
+                            ? "引き分け"
+                            : `${getPlayerDisplayName(battleState.winner)} WIN`
+                    }
+                </strong>
+
+                <span>
+                    ${battleState.gameOverReason || ""}
+                </span>
+
+                <button
+                    type="button"
+                    id="return-title-button"
+                    style="margin-top:18px;padding:12px 24px;cursor:pointer;"
+                >
+                    タイトルに戻る
+                </button>
+            </div>
+        `;
+
+        document
+            .getElementById("return-title-button")
+            ?.addEventListener("click", () => {
+                window.location.href = "/title/title.html";
+            });
+
         return;
     }
 

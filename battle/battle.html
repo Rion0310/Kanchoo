@@ -37,15 +37,35 @@
 
     <section class="battle-layout">
 
-        <!-- PLAYER 1 -->
+        <!--
+            [4人対戦対応]
+            以前はPLAYER1(左)/PLAYER2(右)の2枚だけだったが、
+            最大4人分のパネルを用意した。
+            どの実プレイヤーをどのパネルに表示するかはbattle.js側で
+            動的に決める（自分を必ず左下(スロット1)に固定し、
+            残りを時計回りに配置する）。2人対戦のときはスロット3・4は
+            使われず、以前と全く同じ見た目になる。
+        -->
+
+        <!-- SLOT 1 (左下 / 2人対戦ではここがPLAYER1の定位置) -->
         <aside class="player-status player-status-1">
 
-            <div id="player-1-name" class="player-status-header">
-                PLAYER1
-            </div>
+            <div id="player-1-name" class="player-status-header"></div>
 
             <div
                 id="player-1-status"
+                class="character-status-list"
+            ></div>
+
+        </aside>
+
+        <!-- SLOT 3 (左上 / 3人目以降が参加したときだけ表示) -->
+        <aside class="player-status-3 slot-hidden">
+
+            <div id="player-3-name" class="player-status-header"></div>
+
+            <div
+                id="player-3-status"
                 class="character-status-list"
             ></div>
 
@@ -67,15 +87,25 @@
         </div>
 
 
-        <!-- PLAYER 2 -->
+        <!-- SLOT 2 (右下 / 2人対戦ではここがPLAYER2の定位置) -->
         <aside class="player-status player-status-2">
 
-            <div id="player-2-name" class="player-status-header">
-                PLAYER2
-            </div>
+            <div id="player-2-name" class="player-status-header"></div>
 
             <div
                 id="player-2-status"
+                class="character-status-list"
+            ></div>
+
+        </aside>
+
+        <!-- SLOT 4 (右上 / 4人目が参加したときだけ表示) -->
+        <aside class="player-status-4 slot-hidden">
+
+            <div id="player-4-name" class="player-status-header"></div>
+
+            <div
+                id="player-4-status"
                 class="character-status-list"
             ></div>
 

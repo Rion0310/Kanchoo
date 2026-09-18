@@ -405,17 +405,20 @@ body {
    対戦プレイヤー
 ======================================== */
 
+/*
+ * [4人対戦対応]
+ * 以前は「PLAYER1 / VSマーク / PLAYER2」の3カラム決め打ちだったが、
+ * 最大4人（赤・青・黄・緑）を横並びで表示できるようにした。
+ * 横幅が狭い画面では2×2に折り返す(下のmedia queryで調整)。
+ */
 .battle-players {
     display: grid;
 
-    grid-template-columns:
-        minmax(0, 1fr)
-        auto
-        minmax(0, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
 
-    align-items: center;
+    align-items: stretch;
 
-    gap: clamp(12px, 3vw, 35px);
+    gap: clamp(8px, 2vw, 18px);
 
     width: 100%;
 }
@@ -430,6 +433,22 @@ body {
     background: rgba(8, 8, 8, 0.6);
 
     text-align: center;
+
+    /*
+     * [BUGFIX] 枠全体をクリック対象にしたので、
+     * 見た目でもクリックできることが分かるようにする。
+     */
+    cursor: pointer;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.battle-player:hover {
+    background: rgba(40, 40, 40, 0.85);
+
+    border-color: #555;
 }
 
 .player-number {
@@ -474,16 +493,28 @@ body {
     color: #ffffff;
 }
 
-.vs-mark {
-    font-size: clamp(12px, 1.8vw, 18px);
+/*
+ * [4人対戦対応 / 色分け]
+ * プレイヤー番号ごとに青・赤・黄・緑の左枠線を付ける。
+ * PLAYER1=青・PLAYER2=赤は、盤面(battle.css/battle.js)側の
+ * 既存の配色をそのまま踏襲している。
+ * この色はshared/constants.jsのPLAYER_COLORSと合わせてあるので、
+ * 色を変える場合は両方直すこと。
+ */
+.battle-player[data-player="1"] {
+    border-left: 3px solid #3b82f6;
+}
 
-    font-weight: 900;
+.battle-player[data-player="2"] {
+    border-left: 3px solid #ef4444;
+}
 
-    font-style: italic;
+.battle-player[data-player="3"] {
+    border-left: 3px solid #eab308;
+}
 
-    color: #555;
-
-    letter-spacing: 0.1em;
+.battle-player[data-player="4"] {
+    border-left: 3px solid #22c55e;
 }
 
 
@@ -769,6 +800,13 @@ body {
 
     .battle-players {
         gap: 8px;
+
+        /*
+         * [4人対戦対応]
+         * 横幅が狭い画面では4列だと文字が潰れるため、
+         * 2×2に折り返す。
+         */
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .battle-player {
@@ -800,10 +838,6 @@ body {
 
     .battle-players {
         gap: 5px;
-    }
-
-    .vs-mark {
-        font-size: 11px;
     }
 
     .battle-player-name {

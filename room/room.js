@@ -83,10 +83,43 @@
     const spectatorCountDisplay = document.getElementById("spectator-count");
     const readyButton = document.getElementById("ready-button");
     const backButton = document.getElementById("back-button");
-    const battlePlayer1 = document.getElementById("battle-player-1");
-    const battlePlayer2 = document.getElementById("battle-player-2");
-    const battleReady1 = document.getElementById("battle-ready-1");
-    const battleReady2 = document.getElementById("battle-ready-2");
+
+    /*
+     * [4人対戦対応]
+     * PLAYER1/PLAYER2決め打ちだった参照を、
+     * C.BATTLE_MAX_PLAYERS(現在は4)の数だけ動的に集めるようにした。
+     * 卓の人数を増減させたくなったときはconstants.js側の値を
+     * 変えるだけで、ここは自動的に追従する。
+     *
+     * battleSlots[i] は「1始まりのプレイヤー番号」をキーにしたオブジェクトで、
+     * slotEl: クリック対象になる枠全体の要素
+     *   [BUGFIX / 卓参加ボタンの当たり判定が文字の部分にしかない件]
+     *   以前は名前テキスト要素(#battle-player-N)自体にclickを貼っていたため、
+     *   見た目上クリックできそうな枠全体（ラベルやREADY表示、余白）を
+     *   クリックしても反応しなかった。room.html側で枠全体に振った
+     *   #battle-slot-N にclickを貼ることで、枠のどこを押しても
+     *   対戦卓へ参加できるようにしてある。
+     * nameEl: プレイヤー名を表示するテキスト要素
+     * readyEl: READY/WAITING表示要素
+     */
+    const battleSlots = [];
+
+    for (let player = 1; player <= C.BATTLE_MAX_PLAYERS; player++) {
+        battleSlots.push({
+            player,
+            slotEl: document.getElementById(`battle-slot-${player}`),
+            nameEl: document.getElementById(`battle-player-${player}`),
+            readyEl: document.getElementById(`battle-ready-${player}`)
+        });
+    }
+
+    function isValidPlayerNumber(number) {
+        return (
+            Number.isInteger(number) &&
+            number >= 1 &&
+            number <= C.BATTLE_MAX_PLAYERS
+        );
+    }
 
     let socket = null;
     let myPlayerNumber = 0;
@@ -94,12 +127,16 @@
     let myReady = false;
     let battleStartedHandled = false;
 
+    function createEmptyBattlePlayers() {
+        return Array.from(
+            { length: C.BATTLE_MAX_PLAYERS },
+            () => ({ name: "", ready: false })
+        );
+    }
+
     let roomState = {
         roomId: FIXED_ROOM_ID,
-        battlePlayers: [
-            { name: "", ready: false },
-            { name: "", ready: false }
-        ],
+        battlePlayers: createEmptyBattlePlayers(),
         spectators: [],
         battleStarted: false
     };
@@ -144,34 +181,32 @@
             roomIdDisplay.textContent = FIXED_ROOM_ID;
         }
 
-        const players = roomState.battlePlayers || [
-            { name: "", ready: false },
-            { name: "", ready: false }
-        ];
+        const players = roomState.battlePlayers || createEmptyBattlePlayers();
 
-        if (battlePlayer1) {
-            battlePlayer1.textContent = players[0]?.name || "WAITING";
-        }
+        /*
+         * [4人対戦対応]
+         * PLAYER1・PLAYER2それぞれ個別に書いていた表示更新を
+         * battleSlotsのループに統一。3人目・4人目が増えても
+         * ここを増やす必要がない。
+         */
+        battleSlots.forEach(({ player, nameEl, readyEl }) => {
+            const info = players[player - 1];
 
-        if (battlePlayer2) {
-            battlePlayer2.textContent = players[1]?.name || "WAITING";
-        }
+            if (nameEl) {
+                nameEl.textContent = info?.name || "WAITING";
+            }
 
-        if (battleReady1) {
-            battleReady1.textContent = players[0]?.ready ? "READY" : "WAITING";
-            battleReady1.classList.toggle("ready", !!players[0]?.ready);
-        }
-
-        if (battleReady2) {
-            battleReady2.textContent = players[1]?.ready ? "READY" : "WAITING";
-            battleReady2.classList.toggle("ready", !!players[1]?.ready);
-        }
+            if (readyEl) {
+                readyEl.textContent = info?.ready ? "READY" : "WAITING";
+                readyEl.classList.toggle("ready", !!info?.ready);
+            }
+        });
 
         if (selectedTableDisplay) {
-            if (selectedTable === "battle1") {
-                selectedTableDisplay.textContent = "対戦卓1";
-            } else if (selectedTable === "battle2") {
-                selectedTableDisplay.textContent = "対戦卓2";
+            const selectedPlayerMatch = /^battle([1-9]\d*)$/.exec(selectedTable || "");
+
+            if (selectedPlayerMatch) {
+                selectedTableDisplay.textContent = `対戦卓${selectedPlayerMatch[1]}`;
             } else if (selectedTable === "spectator") {
                 selectedTableDisplay.textContent = "観戦卓";
             } else {
@@ -182,7 +217,7 @@
         if (battleTable) {
             battleTable.classList.toggle(
                 "active",
-                selectedTable === "battle1" || selectedTable === "battle2"
+                /^battle[1-9]\d*$/.test(selectedTable || "")
             );
         }
 
@@ -198,14 +233,14 @@
         }
 
         if (readyButton) {
-            const isPlayer = myPlayerNumber === 1 || myPlayerNumber === 2;
+            const isPlayer = isValidPlayerNumber(myPlayerNumber);
             const serverReady = isPlayer && !!players[myPlayerNumber - 1]?.ready;
 
             // 送信直後はサーバーからroom_stateが返るまで
             // 自分のローカル状態を表示します。
             const ready = isPlayer && (myReady || serverReady);
 
-            // PLAYER 1/2に割り当てられたら、
+            // PLAYERのいずれかの枠に割り当てられたら、
             // 常に準備ボタンを操作可能にします。
             // 接続前だけは無効にして、接続後の再描画で有効化します。
             const isConnected = socket && socket.readyState === WebSocket.OPEN;
@@ -299,7 +334,7 @@
                 // ROOM入室時点では卓未選択です。
                 // 卓の割り当てはtable_assignedで受け取ります。
                 myPlayerNumber =
-                    assignedPlayerNumber === 1 || assignedPlayerNumber === 2
+                    isValidPlayerNumber(assignedPlayerNumber)
                         ? assignedPlayerNumber
                         : 0;
 
@@ -317,18 +352,18 @@
                 const receivedPlayerNumber = Number(message.yourPlayerNumber);
 
                 /*
-                 * サーバーがPLAYER 1/2を割り当てた場合だけ
-                 * 自分の番号を更新する。
+                 * サーバーがPLAYER枠(1〜C.BATTLE_MAX_PLAYERS)を
+                 * 割り当てた場合だけ自分の番号を更新する。
                  *
                  * これ以外のroom_stateで0に戻さない。
                  */
-                if (receivedPlayerNumber === 1 || receivedPlayerNumber === 2) {
+                if (isValidPlayerNumber(receivedPlayerNumber)) {
                     myPlayerNumber = receivedPlayerNumber;
                 }
 
                 resolveMyPlayerNumber();
 
-                if (myPlayerNumber === 1 || myPlayerNumber === 2) {
+                if (isValidPlayerNumber(myPlayerNumber)) {
                     myReady = !!roomState.battlePlayers?.[myPlayerNumber - 1]?.ready;
                 }
 
@@ -340,7 +375,7 @@
                 selectedTable = message.table || null;
 
                 const assigned = Number(message.playerNumber);
-                myPlayerNumber = assigned === 1 || assigned === 2 ? assigned : 0;
+                myPlayerNumber = isValidPlayerNumber(assigned) ? assigned : 0;
 
                 resolveMyPlayerNumber();
                 renderRoom();
@@ -357,11 +392,15 @@
 
                 battleStartedHandled = true;
 
-                if (
-                    selectedTable !== "battle1" &&
-                    selectedTable !== "battle2" &&
-                    selectedTable !== "spectator"
-                ) {
+                /*
+                 * [4人対戦対応]
+                 * 以前は"battle1"/"battle2"の2択だけを見ていたが、
+                 * "battle3"/"battle4"（さらに枠を増やした場合もその先）を
+                 * 汎用的に受け付けるようにした。
+                 */
+                const selectedTableMatch = /^battle([1-9]\d*)$/.exec(selectedTable || "");
+
+                if (!selectedTableMatch && selectedTable !== "spectator") {
                     // 卓未選択のROOM参加者は試合開始してもBATTLEへ移動しません。
                     battleStartedHandled = false;
                     return;
@@ -375,7 +414,7 @@
                     return;
                 }
 
-                const myPlayer = selectedTable === "battle2" ? 2 : 1;
+                const myPlayer = Number(selectedTableMatch[1]);
 
                 window.location.href =
                     `../battle/battle.html?room=${encodeURIComponent(FIXED_ROOM_ID)}` +
@@ -390,7 +429,7 @@
     function toggleReady() {
         resolveMyPlayerNumber();
 
-        if (myPlayerNumber !== 1 && myPlayerNumber !== 2) {
+        if (!isValidPlayerNumber(myPlayerNumber)) {
             return;
         }
 
@@ -427,8 +466,10 @@
         send({ type: "room_select_table", table });
     }
 
-    battlePlayer1?.addEventListener("click", () => selectTable("battle1"));
-    battlePlayer2?.addEventListener("click", () => selectTable("battle2"));
+    battleSlots.forEach(({ player, slotEl }) => {
+        slotEl?.addEventListener("click", () => selectTable(`battle${player}`));
+    });
+
     spectatorTable?.addEventListener("click", () => selectTable("spectator"));
     readyButton?.addEventListener("click", toggleReady);
 

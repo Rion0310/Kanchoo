@@ -93,9 +93,22 @@
             </div>
 
 
-            <div class="battle-players">
+            <!--
+                [4人対戦対応]
+                以前はPLAYER1/PLAYER2の2枠+中央のVSマークだけだったが、
+                最大4人（赤・青・黄・緑）まで着席できるようにした。
+                卓についている人数はここでは決め打ちせず、
+                実際に着席した人数のまま試合が始まる
+                （room.js側でREADY判定・自動開始を行う）。
+                各枠のdata-player属性が色分け(room.css)のキーになる。
+            -->
+            <div class="battle-players battle-players-4">
 
-                <div class="battle-player">
+                <div
+                    id="battle-slot-1"
+                    class="battle-player"
+                    data-player="1"
+                >
 
                     <div class="player-number">
                         PLAYER 1
@@ -118,12 +131,11 @@
                 </div>
 
 
-                <div class="vs-mark">
-                    VS
-                </div>
-
-
-                <div class="battle-player">
+                <div
+                    id="battle-slot-2"
+                    class="battle-player"
+                    data-player="2"
+                >
 
                     <div class="player-number">
                         PLAYER 2
@@ -145,11 +157,65 @@
 
                 </div>
 
+
+                <div
+                    id="battle-slot-3"
+                    class="battle-player"
+                    data-player="3"
+                >
+
+                    <div class="player-number">
+                        PLAYER 3
+                    </div>
+
+                    <div
+                        id="battle-player-3"
+                        class="battle-player-name"
+                    >
+                        WAITING
+                    </div>
+
+                    <div
+                        id="battle-ready-3"
+                        class="ready-status"
+                    >
+                        WAITING
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="battle-slot-4"
+                    class="battle-player"
+                    data-player="4"
+                >
+
+                    <div class="player-number">
+                        PLAYER 4
+                    </div>
+
+                    <div
+                        id="battle-player-4"
+                        class="battle-player-name"
+                    >
+                        WAITING
+                    </div>
+
+                    <div
+                        id="battle-ready-4"
+                        class="ready-status"
+                    >
+                        WAITING
+                    </div>
+
+                </div>
+
             </div>
 
 
             <div class="table-description">
-                プレイヤー同士で対戦します
+                最大4人まで参加できます。着席した全員がREADYを押すと、その人数のまま対戦が始まります。
             </div>
 
         </button>

@@ -178,6 +178,16 @@ body {
         rgba(0, 0, 0, 0.45);
 }
 
+/*
+ * [4人対戦対応]
+ * 2人対戦では実質使われないが、renderPlayerPanels()は
+ * スロット1〜4すべてに一律でslot-hidden/slot-soloの
+ * toggleを行うため、念のためベースクラス側にも定義しておく。
+ */
+.player-status.slot-hidden {
+    display: none;
+}
+
 
 /* ========================================
    PLAYER 1
@@ -287,6 +297,124 @@ body {
 
 
 /* ========================================
+   PLAYER STATUS 3・4 (4人対戦対応)
+========================================
+
+   3人目・4人目のプレイヤー用パネル。
+   PLAYER1と同じ列(左)にPLAYER3を、PLAYER2と同じ列(右)にPLAYER4を、
+   それぞれ上下に重ねて配置する。
+
+   色は特定のプレイヤー番号に固定せず、battle.js側で
+   「実際にそのスロットに割り当てられたプレイヤー」の色
+   (PLAYER_COLORS)をインラインスタイルで都度設定する。
+   これは、自分を常に左下(スロット1)に固定して表示する都合上、
+   スロットの位置と実際のプレイヤー番号が対戦ごとに変わるため。
+========================================================== */
+
+.player-status-3,
+.player-status-4 {
+    position: absolute;
+
+    width: 240px;
+
+    height: min(40vh, 330px);
+
+    display: flex;
+    flex-direction: column;
+
+    min-width: 0;
+    min-height: 0;
+
+    background: #101010;
+
+    border: 1px solid #333333;
+
+    overflow: hidden;
+
+    box-shadow:
+        0 15px 40px
+        rgba(0, 0, 0, 0.45);
+
+    /* スロット3・4は常に上段(城の反対側)に配置する */
+    bottom: calc(50% + 6px);
+}
+
+.player-status-3.slot-hidden,
+.player-status-4.slot-hidden {
+    display: none;
+}
+
+.player-status-3 {
+    right:
+        calc(
+            50% +
+            min(
+                41vh,
+                calc((100vw - 560px) / 2),
+                410px
+            ) +
+            18px
+        );
+}
+
+.player-status-4 {
+    left:
+        calc(
+            50% +
+            min(
+                41vh,
+                calc((100vw - 560px) / 2),
+                410px
+            ) +
+            18px
+        );
+}
+
+.player-status-3 .player-status-header,
+.player-status-4 .player-status-header {
+    height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    border-bottom: 1px solid #333333;
+}
+
+/* スロット4は右側に表示されるため、スロット2と同じく右寄せにする */
+.player-status-4 .player-status-header {
+    justify-content: flex-end;
+}
+
+/*
+ * [4人対戦対応 / 上下2段レイアウト]
+ * 3人目以降が参加する対戦になると、bodyに"multiplayer-3plus"クラスが
+ * 付与される(battle.js renderPlayerPanels()参照)。
+ * このときだけPLAYER1・PLAYER2のパネルを半分の高さにして、
+ * 下段(城に近い側)へ寄せる。ペアになるスロット(3・4)が
+ * 実際には使われていない(2人対戦)場合は"slot-solo"が付き、
+ * 元どおり全高・中央寄せの表示に戻る。
+ */
+body.multiplayer-3plus .player-status-1,
+body.multiplayer-3plus .player-status-2 {
+    height: min(40vh, 330px);
+    top: calc(50% + 6px);
+    bottom: auto;
+    transform: none;
+}
+
+body.multiplayer-3plus .player-status-1.slot-solo,
+body.multiplayer-3plus .player-status-2.slot-solo {
+    height: min(82vh, 680px);
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+}
+
+
+/* ========================================
    CHARACTER LIST
 ======================================== */
 
@@ -360,6 +488,7 @@ body {
 
 
 /* PLAYER COLORS */
+/* [4人対戦対応] 青・赤の2色から、青・赤・黄・緑の4色に拡張した。 */
 
 .character-status-card.player-1 {
     border-left:
@@ -367,8 +496,18 @@ body {
 }
 
 .character-status-card.player-2 {
-    border-right:
+    border-left:
         3px solid #ef4444;
+}
+
+.character-status-card.player-3 {
+    border-left:
+        3px solid #eab308;
+}
+
+.character-status-card.player-4 {
+    border-left:
+        3px solid #22c55e;
 }
 
 
@@ -399,6 +538,30 @@ body {
         inset 0 0 0 1px #ef4444,
         0 0 12px
         rgba(239, 68, 68, 0.25);
+}
+
+.character-status-card.player-3.selected {
+
+    background: #3b3318;
+
+    border-color: #eab308;
+
+    box-shadow:
+        inset 0 0 0 1px #eab308,
+        0 0 12px
+        rgba(234, 179, 8, 0.25);
+}
+
+.character-status-card.player-4.selected {
+
+    background: #173b22;
+
+    border-color: #22c55e;
+
+    box-shadow:
+        inset 0 0 0 1px #22c55e,
+        0 0 12px
+        rgba(34, 197, 94, 0.25);
 }
 
 
@@ -1122,6 +1285,23 @@ body {
 
 .kill-cut-in.player-2 .kill-cut-in-kill {
     color: #ff7070;
+}
+
+/* [4人対戦対応] 黄(PLAYER3)・緑(PLAYER4)を追加 */
+.kill-cut-in.player-3 .kill-cut-in-content {
+    border-color: #eab308;
+}
+
+.kill-cut-in.player-3 .kill-cut-in-kill {
+    color: #f5d34d;
+}
+
+.kill-cut-in.player-4 .kill-cut-in-content {
+    border-color: #22c55e;
+}
+
+.kill-cut-in.player-4 .kill-cut-in-kill {
+    color: #6ee89a;
 }
 
 .kill-cut-in-flash {

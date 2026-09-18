@@ -57,9 +57,9 @@ const skillDatabase = [
         id: 5,
         name: "銃チョー",
         type: "特殊",
-        power: 80,
-        effect: "damage_falloff_by_target_count",
-        description: "広範囲の敵に攻撃。対象が多いほど威力が下がる。",
+        power: 50,
+        effect: "damage",
+        description: "広範囲の敵に攻撃。必ず命中する。",
         targeting: {
             type: "move_range",
             targetCount: "all",
@@ -177,25 +177,29 @@ const skillDatabase = [
 ];
 
 
-const characterSkillsDatabase = {
-    1: [1, 2, 4, 5], // デスリオン
-    2: [1, 3, 7, 8], // 清武
-    3: [1, 3, 7, 10], // 桃子
-    4: [1, 5, 6, 13], // りおん
-    5: [1, 5, 7, 8], // 武
-    6: [1, 5, 6, 11], // VOLCANO MAN
-    7: [1, 5, 6, 9], // 割り箸工場のおじさん
-    8: [1, 2, 9, 12], // ゆうな
-    9: [1, 7, 8, 9], // そらと
-    10: [1, 6, 9, 10], // しおん
-    11: [1, 5, 9, 11], // フヂムラメイ
-    12: [1, 2, 5, 10], // hasuo
-    13: [1, 9, 11, 12], // きよし
-    14: [1, 8, 10, 11], // 大木克幸
-    15: [1, 3, 7, 11] // 某ミニマリスト
-};
-
-
+/*
+ * [DB統合 / 保守性]
+ * 以前はここに characterSkillsDatabase という
+ * 「id → 技ID配列」の別オブジェクトを独立して持っており、
+ * どのキャラクターの技構成かは
+ *     1: [1, 2, 4, 5], // デスリオン
+ * という末尾のコメントだけで人間が目視確認する形になっていた。
+ *
+ * これだと、
+ *   ・characterDatabase側でキャラを追加/削除しても、
+ *     characterSkillsDatabase側を直し忘れても気づけない
+ *   ・コメントの名前とidがズレても誰も検知できない
+ * という「同じキャラクターの情報が2箇所に分裂していて、
+ * コメントでしか繋がっていない」状態だった。
+ *
+ * 技構成(skills)は、以後 characterDatabase の各キャラクター
+ * オブジェクトに直接持たせる。characterSkillsDatabase自体は
+ * このファイルの下の方で characterDatabase から自動生成しており、
+ * window.MONSTER_WAR_DATA.characterSkillsDatabase の形は
+ * 今までと完全に同じ（id → 技ID配列）ままなので、
+ * これを直接参照している既存の画面（party/script.js等）は
+ * 無修正で動くはず。
+ */
 const characterDatabase = [
     {
         id: 1,
@@ -206,7 +210,8 @@ const characterDatabase = [
         defense: 100,
         move: 4,
         description: "りおんが我が道往くためにデスカンチョーに堕ちた姿。",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 2, 4, 5]
     },
     {
         id: 2,
@@ -217,7 +222,8 @@ const characterDatabase = [
         defense: 100,
         move: 3,
         description: "争いは好まない穏便派。回復担当。",
-        type: "healer"
+        type: "healer",
+        skills: [1, 3, 7, 8]
     },
     {
         id: 3,
@@ -228,7 +234,8 @@ const characterDatabase = [
         defense: 100,
         move: 4,
         description: "弱っちい。なぜなら女だから。",
-        type: "healer"
+        type: "healer",
+        skills: [1, 3, 7, 10]
     },
     {
         id: 4,
@@ -239,7 +246,8 @@ const characterDatabase = [
         defense: 100,
         move: 5,
         description: "しおんの相棒。素早い。",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 5, 6, 7]
     },
     {
         id: 5,
@@ -250,7 +258,8 @@ const characterDatabase = [
         defense: 100,
         move: 3,
         description: "ひょうひょうとしていて様々こなせる。",
-        type: "supporter"
+        type: "supporter",
+        skills: [1, 5, 7, 8]
     },
     {
         id: 6,
@@ -261,7 +270,8 @@ const characterDatabase = [
         defense: 180,
         move: 2,
         description: "己の御髪を火山にされたバーバーへの怒りで豹変。",
-        type: "deffencer"
+        type: "deffencer",
+        skills: [1, 5, 6, 11]
     },
     {
         id: 7,
@@ -272,7 +282,8 @@ const characterDatabase = [
         defense: 80,
         move: 4,
         description: "どんなに足の速い生物でも影から逃れられないように、彼からは誰も...。",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 5, 6, 9]
     },
     {
         id: 8,
@@ -283,7 +294,8 @@ const characterDatabase = [
         defense: 60,
         move: 5,
         description: "絶世の醜女",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 2, 9, 12]
     },
     {
         id: 9,
@@ -294,7 +306,8 @@ const characterDatabase = [
         defense: 150,
         move: 3,
         description: "陰テリ系馬カス",
-        type: "supporter"
+        type: "supporter",
+        skills: [1, 7, 8, 9]
     },
     {
         id: 10,
@@ -305,7 +318,8 @@ const characterDatabase = [
         defense: 120,
         move: 20,
         description: "ニート。",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 6, 9, 10]
     },
     {
         id: 11,
@@ -316,7 +330,8 @@ const characterDatabase = [
         defense: 100,
         move: 4,
         description: "素性の知れない流浪人。数少ない女性の強者。",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 5, 9, 11]
     },
     {
         id: 12,
@@ -327,7 +342,8 @@ const characterDatabase = [
         defense: 150,
         move: 1,
         description: "電車の中で弁当を食い始める生粋の関西人。",
-        type: "deffencer"
+        type: "deffencer",
+        skills: [1, 2, 5, 10]
     },
     {
         id: 13,
@@ -338,7 +354,8 @@ const characterDatabase = [
         defense: 150,
         move: 6,
         description: "還暦間近のジジイ。",
-        type: "attacker"
+        type: "attacker",
+        skills: [1, 9, 11, 12]
     },
     {
         id: 14,
@@ -349,7 +366,8 @@ const characterDatabase = [
         defense: 180,
         move: 4,
         description: "ドMバイ家畜克幸",
-        type: "deffencer"
+        type: "deffencer",
+        skills: [1, 8, 10, 11]
     },
     {
         id: 15,
@@ -360,9 +378,25 @@ const characterDatabase = [
         defense: 100,
         move: 5,
         description: "私が障ガイ者だから差別をしているんだねい！！",
-        type: "healer"
+        type: "healer",
+        skills: [1, 3, 7, 11]
     }
 ];
+
+/*
+ * characterDatabase の skills から自動生成する。
+ * 手書きの id → 技ID配列 マッピングをここでは一切持たない。
+ * window.MONSTER_WAR_DATA.characterSkillsDatabase の形は
+ * 以前と同じ（id → 技ID配列のオブジェクト）なので、
+ * これを直接参照している既存コードは変更不要。
+ */
+const characterSkillsDatabase = characterDatabase.reduce(
+    (map, character) => {
+        map[character.id] = character.skills || [];
+        return map;
+    },
+    {}
+);
 
 const characterSongDatabase = {
     1: {

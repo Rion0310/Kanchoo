@@ -9,17 +9,31 @@ const PORT = Number(process.env.PORT || 8080);
 const ROOT = __dirname;
 const rooms = new Map();
 
+/*
+ * [4人対戦対応]
+ * 対戦卓の枠数はCONSTANTS.BATTLE_MAX_PLAYERSだけを見て決まるようにする。
+ * 2人固定だった頃はここに直接2要素の配列を書いていたが、
+ * 枠数を増やす/減らす場合にここと他の判定箇所とで
+ * 食い違いが起きないよう、必ずこのヘルパー経由で生成する。
+ */
+function createEmptyBattlePlayers() {
+    return Array.from(
+        { length: CONSTANTS.BATTLE_MAX_PLAYERS },
+        () => ({ sessionId: "", socket: null, name: "", ready: false, party: [] })
+    );
+}
+
 function createRoom(roomId) {
     return {
         roomId,
-        battlePlayers: [
-            { sessionId: "", socket: null, name: "", ready: false, party: [] },
-            { sessionId: "", socket: null, name: "", ready: false, party: [] }
-        ],
+        battlePlayers: createEmptyBattlePlayers(),
         spectators: new Set(),
         sockets: new Set(),
         battleStarted: false,//
         battleState: null,
+        // 実際にその対戦を開始したプレイヤー番号一覧(1〜4のうち着席していた人数分)。
+        // 手番のローテーションや同期チェックはこれを基準にする。
+        activePlayers: [],
         expectedPlayer: 1,
         battleResetTimer: null
     };
@@ -43,19 +57,17 @@ function resetBattleRoom(room) {
 
     room.battleStarted = false;
     room.battleState = null;
+    room.activePlayers = [];
     room.expectedPlayer = 1;
 
-    room.battlePlayers = [
-        { sessionId: "", socket: null, name: "", ready: false, party: [] },
-        { sessionId: "", socket: null, name: "", ready: false, party: [] }
-    ];
+    room.battlePlayers = createEmptyBattlePlayers();
 
     // 現在のROOM接続はそのまま残し、
     // PLAYER枠だけを新しい対戦のために解放する。
     for (const socket of room.sockets) {
         socket.inBattle = false;
 
-        if (socket.playerNumber === 1 || socket.playerNumber === 2) {
+        if (socket.playerNumber >= 1 && socket.playerNumber <= CONSTANTS.BATTLE_MAX_PLAYERS) {
             // 試合終了後は卓から完全に解放します。
             // 勝者・敗者を観戦卓へ自動移動させない。
             socket.playerNumber = 0;
@@ -110,7 +122,7 @@ function publicRoom(room) {
  * 新しい卓へ移動させる。
  */
 function releaseOwnedBattleSlot(room, socket) {
-    if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+    if (socket.playerNumber < 1 || socket.playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS) {
         return;
     }
 
@@ -150,33 +162,50 @@ function send(socket, payload) {
     }
 }
 
+/*
+ * [4人対戦対応 / 自動FIT]
+ *
+ * 「対戦卓についている全員がREADYを押したら、その時点の人数で開始する」
+ * というルールに変更した。
+ * 以前はPLAYER1・PLAYER2の両方が名前を持ちREADYであることを
+ * 決め打ちでチェックしていたが、今は
+ *   1. 実際に着席している(sessionIdを持つ)枠だけを対象にする
+ *   2. 着席人数が最低開始人数(2人)以上であること
+ *   3. 着席している枠が「全員」READYであること
+ * の3条件がそろった時点で、そのときの着席人数(2〜4人)のまま開始する。
+ * 盤面側(battle.js)はplayers配列の人数を見て城の配置などを自動調整する。
+ */
 function sendBattleStart(room) {
-    if (!room.battlePlayers[0].name || !room.battlePlayers[1].name) return;
-    if (!room.battlePlayers[0].ready || !room.battlePlayers[1].ready) return;
+    const seatedIndexes = room.battlePlayers
+        .map((player, index) => (player.sessionId ? index : -1))
+        .filter(index => index !== -1);
+
+    if (seatedIndexes.length < CONSTANTS.BATTLE_MIN_PLAYERS_TO_START) return;
+
+    const allReady = seatedIndexes.every(
+        index => room.battlePlayers[index].ready
+    );
+
+    if (!allReady) return;
 
     room.battleStarted = true;
+    room.activePlayers = seatedIndexes.map(index => index + 1);
+    room.expectedPlayer = room.activePlayers[0];
 
     const payload = {
         type: "battle_start",
         roomId: room.roomId,
-        players: [
-            {
-                player: 1,
-                name: room.battlePlayers[0].name,
-                party: room.battlePlayers[0].party || []
-            },
-            {
-                player: 2,
-                name: room.battlePlayers[1].name,
-                party: room.battlePlayers[1].party || []
-            }
-        ]
+        players: seatedIndexes.map(index => ({
+            player: index + 1,
+            name: room.battlePlayers[index].name,
+            party: room.battlePlayers[index].party || []
+        }))
     };
 
     for (const socket of room.sockets) {
         if (
             socket.readyState === WebSocket.OPEN &&
-            (socket.playerNumber === 1 || socket.playerNumber === 2 ||
+            (room.activePlayers.includes(socket.playerNumber) ||
                 room.spectators.has(socket))
         ) {
             send(socket, payload);
@@ -313,8 +342,22 @@ function handleMessage(socket, message) {
 
         let requestedIndex = -1;
 
-        if (table === "battle1" || table === "battle2") {
-            requestedIndex = Number(table.slice(-1)) - 1;
+        /*
+         * [4人対戦対応]
+         * "battle1"〜"battle4"(CONSTANTS.BATTLE_MAX_PLAYERSまで)を
+         * 汎用的に受け付ける。以前は"battle1"/"battle2"の2択だけを
+         * 決め打ちでチェックしていた。
+         */
+        if (/^battle[1-9]\d*$/.test(table)) {
+            const parsedNumber = Number(table.slice("battle".length));
+
+            if (
+                Number.isInteger(parsedNumber) &&
+                parsedNumber >= 1 &&
+                parsedNumber <= CONSTANTS.BATTLE_MAX_PLAYERS
+            ) {
+                requestedIndex = parsedNumber - 1;
+            }
         } else if (table === "battle") {
             // BATTLE側の再接続用。sessionId（本人確認用の一意なID）から
             // 元のPLAYER枠を復元します。名前が他人と重複していても
@@ -332,7 +375,7 @@ function handleMessage(socket, message) {
             }
         }
 
-        if (requestedIndex !== 0 && requestedIndex !== 1) {
+        if (requestedIndex < 0 || requestedIndex >= CONSTANTS.BATTLE_MAX_PLAYERS) {
             send(socket, {
                 type: "room_error",
                 message: "指定された対戦卓が見つかりません。"
@@ -343,7 +386,8 @@ function handleMessage(socket, message) {
         // 現在の卓から別の卓へ移動する場合は、
         // 先に自分が占有していたPLAYER枠を解放します。
         if (
-            (socket.playerNumber === 1 || socket.playerNumber === 2) &&
+            socket.playerNumber >= 1 &&
+            socket.playerNumber <= CONSTANTS.BATTLE_MAX_PLAYERS &&
             socket.playerNumber - 1 !== requestedIndex
         ) {
             releaseOwnedBattleSlot(room, socket);
@@ -395,7 +439,7 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "room_ready") {
-        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+        if (socket.playerNumber < 1 || socket.playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS) {
             send(socket, {
                 type: "room_error",
                 message: "PLAYERとして参加していません。"
@@ -434,9 +478,8 @@ function handleMessage(socket, message) {
 
     if (data.type === "battle_join") {
         if (
-            socket.playerNumber !== 0 &&
-            socket.playerNumber !== 1 &&
-            socket.playerNumber !== 2
+            socket.playerNumber < 0 ||
+            socket.playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS
         ) {
             return;
         }
@@ -489,7 +532,7 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "battle_event") {
-        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+        if (socket.playerNumber < 1 || socket.playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS) {
             return;
         }
 
@@ -529,7 +572,7 @@ function handleMessage(socket, message) {
     }
 
     if (data.type === "battle_state") {
-        if (socket.playerNumber !== 1 && socket.playerNumber !== 2) {
+        if (socket.playerNumber < 1 || socket.playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS) {
             return;
         }
 
@@ -554,7 +597,7 @@ function handleMessage(socket, message) {
         const nextPlayer =
             Number(incomingState.currentPlayer);
 
-        if (nextPlayer === 1 || nextPlayer === 2) {
+        if (nextPlayer >= 1 && nextPlayer <= CONSTANTS.BATTLE_MAX_PLAYERS) {
             room.expectedPlayer = nextPlayer;
         }
 
@@ -668,7 +711,7 @@ wss.on("connection", socket => {
         room.sockets.delete(socket);
         room.spectators.delete(socket);
 
-        if (socket.playerNumber === 1 || socket.playerNumber === 2) {
+        if (socket.playerNumber >= 1 && socket.playerNumber <= CONSTANTS.BATTLE_MAX_PLAYERS) {
             const index = socket.playerNumber - 1;
             const player = room.battlePlayers[index];
 
