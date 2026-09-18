@@ -20,7 +20,13 @@
 <body>
 
 <main class="battle-screen">
-    <audio src="../audio/CanChokeAcoustic.mp3" loop ></audio>
+    <!--
+        [BATTLE BGM]
+        以前からこのタグ自体はあったが、再生を開始するJSが
+        どこにもなく実際には鳴っていなかった。battle.js側で
+        id="battle-bgm" を使って再生を開始する。
+    -->
+    <audio id="battle-bgm" src="../audio/CanChokeInst.mp3" loop ></audio>
 
     <header class="battle-header">
 

@@ -597,6 +597,82 @@ function connectOnlineBattle() {
 
 
 /* ========================================
+   BATTLE BGM
+======================================== */
+
+/*
+ * [新しい音楽を流す時は、それまで鳴っていた音楽をすべて止める]
+ *
+ * BATTLE BGM(#battle-bgm)とキャラソン(characterSongAudio)は
+ * それぞれ独立に再生されていたため、キル時にキャラソンが鳴り始めても
+ * BGMは止まらず、両方が同時に鳴り続けてしまっていた。
+ * 「何か新しい曲を再生する直前に、必ずこの関数を呼んで
+ * 今鳴っている音楽をすべて止める」というルールに統一する。
+ * BGM側・キャラソン側どちらの再生開始処理からも、
+ * play()を呼ぶ直前に必ずこれを呼ぶ。
+ */
+function stopAllBattleAudio() {
+
+    const bgm = document.getElementById("battle-bgm");
+
+    if (bgm && !bgm.paused) {
+        bgm.pause();
+    }
+
+    if (characterSongAudio && !characterSongAudio.paused) {
+        characterSongAudio.pause();
+        characterSongAudio.currentTime = 0;
+    }
+
+}
+
+/*
+ * [BATTLE中はCanChokeInst.mp3を再生]
+ * battle.html側の<audio id="battle-bgm">を対戦中ずっとループ再生する。
+ *
+ * ブラウザの自動再生ポリシーにより、ユーザー操作を伴わないページ読み込み
+ * 直後の音声再生は失敗することがある（ROOM→BATTLEの画面遷移は
+ * ページ全体の再読み込みを伴うため、遷移前のクリックは
+ * 「このページ上の操作」としては引き継がれない場合がある）。
+ * そのため、まず即座に再生を試み、失敗した場合は最初のクリック/
+ * キー入力/タップを待ってから再度再生を試みるようにしてある。
+ */
+function startBattleBgm() {
+
+    const bgm = document.getElementById("battle-bgm");
+
+    if (!bgm) {
+        return;
+    }
+
+    bgm.volume = 0.6;
+    bgm.loop = true;
+
+    const tryPlay = () => {
+        stopAllBattleAudio();
+        return bgm.play().catch(error => {
+            console.warn("BGMの自動再生がブロックされました。操作待ちします。", error);
+        });
+    };
+
+    tryPlay();
+
+    const resumeOnInteraction = () => {
+        stopAllBattleAudio();
+        bgm.play().catch(() => {});
+    };
+
+    ["click", "keydown", "touchstart"].forEach(eventName => {
+        document.addEventListener(
+            eventName,
+            resumeOnInteraction,
+            { once: true }
+        );
+    });
+}
+
+
+/* ========================================
    CHARACTER SONG
 ======================================== */
 
@@ -607,14 +683,22 @@ function playCharacterSong(characterId) {
 
     const song = characterSongDatabase?.[characterId];
 
-    if (characterSongAudio) {
-        characterSongAudio.pause();
-        characterSongAudio.currentTime = 0;
-    }
+    /*
+     * [新しい音楽を流す時は、それまで鳴っていた音楽をすべて止める]
+     * 以前はここで前回のキャラソンだけを止めていたが、
+     * BGM(#battle-bgm)が鳴っていた場合はそちらが止まらず、
+     * キャラソンと同時に鳴り続けてしまっていた。
+     * stopAllBattleAudio()でBGM・前回のキャラソンの両方を止めてから
+     * 新しい曲の再生を始める。
+     */
+    stopAllBattleAudio();
 
     if (!song || !song.path) {
         characterSongAudio = new Audio("../audio/CanChoke.mp3");
         characterSongAudio.volume = 1.0;
+
+        // [LOOP再生] キルカットイン中、曲が終わっても最初から繰り返す。
+        characterSongAudio.loop = true;
 
         characterSongAudio.play().catch(error => {
             console.error("通常曲の再生に失敗しました。", error);
@@ -626,6 +710,9 @@ function playCharacterSong(characterId) {
 
     characterSongAudio = new Audio(song.path);
     characterSongAudio.volume = 1.0;
+
+    // [LOOP再生] キャラソンも同様に、終わったら最初から繰り返す。
+    characterSongAudio.loop = true;
 
     characterSongAudio.play().catch(error => {
         console.error("キャラソングの再生に失敗しました。", error);
@@ -3003,10 +3090,39 @@ function selectBluffType(unit, type) {
      * [BUGFIX / 連続使用不可]
      * ブラフも「待機」と同じく技を使わない行動なので、
      * 「前回使った技」の記録はここでリセットする（待機と同様）。
+     * ただしこの後で攻撃を選んだ場合は、executeSkill()側で
+     * 改めて使用した技のIDが記録される。
      */
     unit.lastSkillId = null;
 
-    finishUnitAction();
+    /*
+     * [ブラフと攻撃の両立]
+     * 以前はここでfinishUnitAction()を呼び、ブラフを選んだ時点で
+     * このユニットの行動を「待機」と同じように確定させ、
+     * ターンを終えていた（＝ブラフと攻撃を同じターンに両立できなかった）。
+     *
+     * 今回、ブラフを仕込んだ後もそのまま攻撃(技を発動)へ進めるように、
+     * finishUnitAction()は呼ばずbattleState.actionPhaseを維持したまま
+     * 行動選択パネルへ戻す。何も攻撃しなければ、この後「待機」を選んで
+     * 通常どおり行動を終えられる。
+     *
+     * ただし移動位置はブラフを確定した時点でロックする
+     * （actionOriginRow/Columnをクリアし、「移動をやり直す」を
+     * 選べなくする＝updateControlPanel側でボタンごと非表示にする）。
+     * これをしないと、この後executeSkill()が呼ばれた際に
+     * logFinalizedMovementIfAny()が同じ移動ログをもう一度
+     * 記録してしまう。
+     */
+    battleState.actionOriginRow = null;
+    battleState.actionOriginColumn = null;
+
+    clearCellStates();
+
+    renderUnitIcons();
+    renderPlayerPanels();
+    updateControlPanel();
+
+    onlineSendState();
 }
 
 
@@ -3779,37 +3895,54 @@ function applyDamage(
         !ignoreBluff &&
         !!target.bluffType;
 
-    if (bluffActive) {
-        const bluffNames = {
-            ketsukacchin: "ケツカッチン",
-            ketsuiki: "ケツイキ",
-            dappunta: "脱糞ター"
-        };
+    /*
+     * [ブラフ発動時のログ表示]
+     * 以前はどのブラフでも「○○のケツカッチン発動！」のような
+     * 汎用ログ1行＋その下の通常ダメージログ（無効化された場合は
+     * 「0ダメージ」）という組み合わせだった。
+     * ここでは種類ごとに指定された1行だけで完結するようにする。
+     * （ケツカッチンが時差式カンチョーで貫通された場合など、
+     * 効果が発動しなかった場合は通常のダメージログへフォールバックする）
+     */
+    let bluffAbsorbed = false;
 
-        addBattleLog(
-            `${target.name}の${bluffNames[target.bluffType] || target.bluffType}発動！`
-        );
+    if (bluffActive) {
 
         if (
             target.bluffType === "ketsukacchin" &&
             !skill?.piercesKetsukacchin
         ) {
             finalDamage = 0;
-        }
+            bluffAbsorbed = true;
 
-        if (target.bluffType === "ketsuiki") {
+            addBattleLog(
+                `${target.name}はケツカッチンを発動！ダメージを無効化した！`
+            );
+
+        } else if (target.bluffType === "ketsuiki") {
+
             target.hp = Math.min(
                 target.maxHp,
                 target.hp + finalDamage
             );
-            finalDamage = 0;
-        }
 
-        if (
+            addBattleLog(
+                `${target.name}はケツイキした！${target.name}は${finalDamage}回復！`
+            );
+
+            finalDamage = 0;
+            bluffAbsorbed = true;
+
+        } else if (
             target.bluffType === "dappunta" &&
             attacker &&
             attacker.alive
         ) {
+
+            addBattleLog(
+                `${target.name}は脱糞した！${attacker.name}に${finalDamage}ダメージ！`
+            );
+
             attacker.hp = Math.max(
                 0,
                 attacker.hp - finalDamage
@@ -3822,6 +3955,21 @@ function applyDamage(
             }
 
             finalDamage = 0;
+            bluffAbsorbed = true;
+
+        } else {
+
+            // ケツカッチンが時差式カンチョーで貫通された場合などのフォールバック。
+            const bluffNames = {
+                ketsukacchin: "ケツカッチン",
+                ketsuiki: "ケツイキ",
+                dappunta: "脱糞ター"
+            };
+
+            addBattleLog(
+                `${target.name}のブラフ(${bluffNames[target.bluffType] || target.bluffType})が破られた！`
+            );
+
         }
 
         target.bluffType = null;
@@ -3830,7 +3978,7 @@ function applyDamage(
         );
     }
 
-    if (attacker && skill && target) {
+    if (!bluffAbsorbed && attacker && skill && target) {
         addBattleLog(
             `${target.name}に${finalDamage}ダメージ！`
         );
@@ -4925,7 +5073,11 @@ function updateControlPanel() {
                 </span>
 
                 <span>
-                    移動完了
+                    ${
+                        actionUnit.bluffType
+                            ? "ブラフ発動中・攻撃も可能"
+                            : "移動完了"
+                    }
                 </span>
 
             </div>
@@ -4948,21 +5100,34 @@ function updateControlPanel() {
                     待機
                 </button>
 
+                ${
+                    /*
+                     * [ブラフと攻撃の両立]
+                     * このユニットが既にブラフを仕込み済み(actionUnit.bluffType)
+                     * であれば、「ブラフ」ボタンは表示しない
+                     * (1ユニット1ターンにつきブラフは1回だけ)。
+                     * 「移動をやり直す」も、ブラフ確定と同時に移動位置を
+                     * ロックする仕様にしたため、ここでは表示しない。
+                     */
+                    actionUnit.bluffType
+                        ? ""
+                        : `
+                            <button
+                                type="button"
+                                id="bluff-action-button"
+                            >
+                                ブラフ
+                            </button>
 
-                <button
-                    type="button"
-                    id="bluff-action-button"
-                >
-                    ブラフ
-                </button>
 
-
-                <button
-                    type="button"
-                    id="undo-move-action-button"
-                >
-                    移動をやり直す
-                </button>
+                            <button
+                                type="button"
+                                id="undo-move-action-button"
+                            >
+                                移動をやり直す
+                            </button>
+                        `
+                }
 
             </div>
 
@@ -5097,6 +5262,8 @@ function initialize() {
     ensureBattleLog();
 
     createUnits();
+
+    startBattleBgm();
 
     /*
      * 初期配置を盤面へ表示
