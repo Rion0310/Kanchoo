@@ -2430,6 +2430,11 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 
 /*
  * 技対象マスのホバー
+ *
+ * [UI調整]
+ * 以前はtransform:scale(0.96)でマスが縮んで見える動きが付いていたが、
+ * 技選択・方向選択のたびにマスの大きさが変わって見づらい/うっとうしいとの
+ * ことだったので、拡大縮小はやめて色の変化だけにした。
  */
 
 .board-cell.skill-target:hover {
@@ -2439,8 +2444,6 @@ body.multiplayer-3plus .player-status-2.slot-solo {
     box-shadow:
         inset 0 0 0 2px rgba(255, 235, 130, 1),
         inset 0 0 18px rgba(255, 190, 50, 0.5);
-
-    transform: scale(0.96);
 }
 
 

@@ -6,7 +6,7 @@
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 16;
+const BOARD_SIZE = 12;
 
 /*
  * [FIELD SIZE / 保守性]
@@ -219,7 +219,9 @@ function serializeBattleState() {
         playerNames: onlinePlayerNames,
         battleLogs: battleState.battleLogs,
         bluffUnits: [...battleState.bluffUnits],
-        bluffUses: battleState.bluffUses
+        bluffUses: battleState.bluffUses,
+        // [キャラソン復元] 現在流れているべき曲(null=デフォルトBGM)。
+        currentTrackCharacterId: battleState.currentTrackCharacterId ?? null
     };
 }
 
@@ -270,6 +272,7 @@ function applyOnlineState(state) {
     const previousPlayer = battleState.currentPlayer;
     const previousGameOver = battleState.gameOver;
     const previousActivePlayersKey = battleState.activePlayers.join(",");
+    const previousTrackCharacterId = battleState.currentTrackCharacterId ?? null;
 
     battleState.turn = Number(state.turn || 1);
     battleState.currentPlayer = Number(state.currentPlayer || 1);
@@ -321,6 +324,10 @@ function applyOnlineState(state) {
         new Set(Array.isArray(state.bluffUnits) ? state.bluffUnits : []);
     battleState.bluffUses =
         state.bluffUses || battleState.bluffUses;
+    battleState.currentTrackCharacterId =
+        state.currentTrackCharacterId != null
+            ? state.currentTrackCharacterId
+            : null;
 
     // 参加人数が変わっていれば(=試合開始直後やスペクテーター参加時など)
     // 城の配置も現在のactivePlayersに合わせて描き直す。
@@ -349,6 +356,24 @@ function applyOnlineState(state) {
         battleState.currentPlayer === Number(MY_PLAYER_NUMBER)
     ) {
         showYourTurnCutIn();
+    }
+
+    /*
+     * [BUGFIX / タブを閉じて再度開くとキャラソンが消える件]
+     * サーバーから受け取った「今流れているべき曲」が
+     * ローカルで今鳴っている曲と違う場合だけ切り替える。
+     * (同じなら毎回playCharacterSong()し直してcurrentTimeが
+     *  0に戻ってしまうのを防ぐ)
+     * これにより、キャラソン再生中に別のクライアントが参加/再接続
+     * してきた場合や、タブを閉じて再度開いた場合でも、
+     * 正しい曲へ復元される。
+     */
+    if (battleState.currentTrackCharacterId !== previousTrackCharacterId) {
+        if (battleState.currentTrackCharacterId != null) {
+            playCharacterSong(battleState.currentTrackCharacterId);
+        } else {
+            startBattleBgm();
+        }
     }
 
     onlineApplyingState = false;
@@ -648,6 +673,9 @@ function startBattleBgm() {
     bgm.volume = 0.6;
     bgm.loop = true;
 
+    // [キャラソン復元] デフォルトBGMに戻すので「今流れているべき曲」もnullにする。
+    battleState.currentTrackCharacterId = null;
+
     const tryPlay = () => {
         stopAllBattleAudio();
         return bgm.play().catch(error => {
@@ -657,7 +685,23 @@ function startBattleBgm() {
 
     tryPlay();
 
+    /*
+     * [BUGFIX / キャラソン再生中に何か操作するとデフォルトBGMに戻る件]
+     * このリスナーは「読み込み直後の自動再生がブロックされたときのため」の
+     * ものだが、以前は成功・失敗にかかわらず常に登録され、しかも
+     * 「一番最初のクリック/キー入力/タップ」で無条件にデフォルトBGMへ
+     * 戻していた。そのため、キルカットインでキャラソンに切り替わった後に
+     * 何か操作すると、このリスナーが（ずっと前に登録されたまま）発火して
+     * キャラソンを止めデフォルトBGMに戻してしまっていた
+     * （特にタブを再読み込みした直後はinitialize()がここを再実行するため
+     * 顕在化しやすい）。
+     * すでに別の曲(キャラソン)へ切り替わっている場合は何もしないようにする。
+     */
     const resumeOnInteraction = () => {
+        if (battleState.currentTrackCharacterId != null) {
+            return;
+        }
+
         stopAllBattleAudio();
         bgm.play().catch(() => {});
     };
@@ -679,9 +723,21 @@ function startBattleBgm() {
 
 let characterSongAudio = null;
 
+/*
+ * [BUGFIX / タブを閉じて再度開くとキャラソンが消える件]
+ * 再接続直後などユーザー操作がまだ発生していないタイミングでは
+ * 自動再生がブロックされることがある。以前はここで再生に失敗すると
+ * そのまま諦めて無音になっていた（startBattleBgm()側にだけ
+ * 「最初の操作を待って再試行する」仕組みがあった）。
+ * ここにも同様の再試行を用意し、かつ「その後さらに別のキルが起きて
+ * 曲が変わっていたら何もしない」ようにcharacterIdを見て確認する。
+ */
 function playCharacterSong(characterId) {
 
     const song = characterSongDatabase?.[characterId];
+
+    // [キャラソン復元] 「今流れているべき曲」をこのキャラのものにする。
+    battleState.currentTrackCharacterId = characterId;
 
     /*
      * [新しい音楽を流す時は、それまで鳴っていた音楽をすべて止める]
@@ -693,32 +749,47 @@ function playCharacterSong(characterId) {
      */
     stopAllBattleAudio();
 
-    if (!song || !song.path) {
-        characterSongAudio = new Audio("../audio/CanChoke.mp3");
-        characterSongAudio.volume = 1.0;
+    const audio = new Audio(song?.path || "../audio/CanChoke.mp3");
 
-        // [LOOP再生] キルカットイン中、曲が終わっても最初から繰り返す。
-        characterSongAudio.loop = true;
+    audio.volume = 1.0;
 
-        characterSongAudio.play().catch(error => {
-            console.error("通常曲の再生に失敗しました。", error);
+    // [LOOP再生] キャラソン(フォールバックの通常曲含む)も
+    // 終わったら最初から繰り返す。
+    audio.loop = true;
+
+    characterSongAudio = audio;
+
+    const label = song?.title || "通常曲";
+
+    const tryPlay = () => {
+        return audio.play().catch(error => {
+            console.warn(`${label}の再生がブロックされました。操作待ちします。`, error);
         });
+    };
 
-        console.log("通常曲を再生します。");
-        return;
-    }
+    tryPlay();
 
-    characterSongAudio = new Audio(song.path);
-    characterSongAudio.volume = 1.0;
+    const resumeOnInteraction = () => {
+        // すでに別の曲に切り替わっていたら(このaudioが差し替えられていたら)何もしない。
+        if (
+            characterSongAudio !== audio ||
+            battleState.currentTrackCharacterId !== characterId
+        ) {
+            return;
+        }
 
-    // [LOOP再生] キャラソンも同様に、終わったら最初から繰り返す。
-    characterSongAudio.loop = true;
+        audio.play().catch(() => {});
+    };
 
-    characterSongAudio.play().catch(error => {
-        console.error("キャラソングの再生に失敗しました。", error);
+    ["click", "keydown", "touchstart"].forEach(eventName => {
+        document.addEventListener(
+            eventName,
+            resumeOnInteraction,
+            { once: true }
+        );
     });
 
-    console.log(`${song.title} を再生します。`);
+    console.log(`${label} を再生します。`);
 }
 
 
@@ -1074,7 +1145,23 @@ const battleState = {
             ketsuiki: 1,
             dappunta: 1
         }
-    }
+    },
+
+    /*
+     * [BUGFIX / タブを閉じて再度開くとキャラソンが消える件]
+     * キルカットインで流れ始めたキャラソンは、これまで
+     * battleStateの一部として同期されておらず、あくまで
+     * 各クライアントのローカルな再生状態でしかなかった。
+     * そのため再読み込み(タブを閉じて再度開く等)すると
+     * initialize()が毎回デフォルトBGMから再生し直してしまい、
+     * すでにキャラソンへ切り替わっていたはずの試合でも
+     * デフォルトBGMに戻ってしまっていた。
+     * 「今流れているべき曲」をbattleState自体に持たせて
+     * serializeBattleState/applyOnlineStateで同期対象に含めることで、
+     * 再接続時にも正しい曲へ復元できるようにする。
+     * null = デフォルトBGM、数値 = そのcharacterIdのキャラソン。
+     */
+    currentTrackCharacterId: null
 
 };
 
@@ -4224,18 +4311,18 @@ const SKILL_EFFECTS = {
         });
     },
 
-    // 次に使う技の威力を一時的に上げる（旧: id 6）
+    // 次に使う技の威力を一時的に上げる
     double_power_next_turn: unit => {
         unit.nextPowerMultiplier = 2;
         unit.nextPowerTurn = battleState.turn + 1;
     },
 
-    // 味方単体を回復（旧: id 7）
+    // 味方単体を回復
     heal_single_ally: (unit, skill, { allies }) => {
         healTargets(allies.slice(0, 1), Number(skill.power || 0));
     },
 
-    // 自軍全体の移動力を上げる（旧: id 8）
+    // 自軍全体の移動力を上げる
     move_buff_all_allies: unit => {
         battleState.units
             .filter(
@@ -4244,7 +4331,7 @@ const SKILL_EFFECTS = {
                     target.player === unit.player
             )
             .forEach(target => {
-                target.move += 2;
+                target.move += 1;
             });
     },
 
@@ -4267,8 +4354,39 @@ const SKILL_EFFECTS = {
                 );
             }
         });
-    }
+    },
 
+    // 自爆する代わりに大ダメージを与える（新規）
+    kamikaze_damage: (unit, skill, { enemies }, multiplier) => {
+        damage_falloff_by_target_count(unit, enemies, skill, multiplier);
+        if (unit.alive) {
+            unit.hp = 0;
+            unit.alive = false;
+            addBattleLog(`${unit.name}は自爆した！`);
+        }
+    },
+
+    // 移動した距離に応じて威力が上がる（新規）
+    damage_scale_with_move_distance: (unit, skill, { enemies }, multiplier) => {
+
+    // このターン、移動前の位置から何マス移動したか。
+    const moveDistance =
+        battleState.actionOriginRow !== null &&
+        battleState.actionOriginColumn !== null
+            ? Math.abs(unit.row - battleState.actionOriginRow) +
+              Math.abs(unit.column - battleState.actionOriginColumn)
+            : 0;
+
+    // 1マスにつき威力+20%（お好みで係数は調整してください）。
+    const moveBonusMultiplier = 1 * moveDistance;
+
+    applyDamageToTargets(
+        unit,
+        enemies,
+        skill,
+        multiplier * moveBonusMultiplier
+    );
+}
 };
 
 /*

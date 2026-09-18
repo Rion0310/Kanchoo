@@ -19,7 +19,7 @@ const skillDatabase = [
         type: "物理",
         power: 999,
         effect: "damage",
-        description: "当たれば確実に相手を殺せるが、範囲が狭いうえに命中しにくい。",
+        description: "当たれば確実に相手を殺せるが、範囲が狭い。",
         targeting: {
             type: "direction",
             range: 1,
@@ -57,9 +57,9 @@ const skillDatabase = [
         id: 5,
         name: "銃チョー",
         type: "特殊",
-        power: 50,
-        effect: "damage",
-        description: "広範囲の敵に攻撃。必ず命中する。",
+        power: 100,
+        effect: "damage_falloff_by_target_count",
+        description: "広範囲の敵に攻撃。対象が多いほど威力が下がる。",
         targeting: {
             type: "move_range",
             targetCount: "all",
@@ -121,9 +121,9 @@ const skillDatabase = [
     },
     {
         id: 10,
-        name: "コンスタンチョー",
+        name: "スクリューカンチョー",
         type: "物理",
-        power: 50,
+        power: 60,
         effect: "damage_ignore_defense",
         description: "必ず定数のダメージを与える。",
         targeting: {
@@ -173,7 +173,34 @@ const skillDatabase = [
             targetCount: "all",
             targetSide: "enemy"
         }
-    }
+    },
+    {
+        id: 14,
+        name: "神風カンチョー",
+        power: 200,
+        effect: "kamikaze_damage",
+        description: "自らを犠牲に、対象へ大ダメージを与える。",
+        targeting: {
+            type: "direction",
+            range: 1,
+            targetCount: "all",
+            targetSide: "enemy"
+        }
+    },
+    {
+        id: 15,
+        name: "ジェットカンチョー",
+        power: 40,
+        effect: "amage_scale_with_move_distance",
+        description: "助走をつけた分だけ威力が上がる",
+        targeting: {
+            type: "direction",
+            range: 2,
+            targetCount: "all",
+            targetSide: "enemy"
+        }
+    },
+
 ];
 
 
@@ -271,7 +298,7 @@ const characterDatabase = [
         move: 2,
         description: "己の御髪を火山にされたバーバーへの怒りで豹変。",
         type: "deffencer",
-        skills: [1, 5, 6, 11]
+        skills: [1, 5, 6, 14]
     },
     {
         id: 7,
@@ -295,7 +322,7 @@ const characterDatabase = [
         move: 5,
         description: "絶世の醜女",
         type: "attacker",
-        skills: [1, 2, 9, 12]
+        skills: [1, 2, 9, 15]
     },
     {
         id: 9,
@@ -316,10 +343,10 @@ const characterDatabase = [
         hp: 150,
         attack: 180,
         defense: 120,
-        move: 20,
+        move: 6,
         description: "ニート。",
         type: "attacker",
-        skills: [1, 6, 9, 10]
+        skills: [1, 6, 9, 15]
     },
     {
         id: 11,
@@ -367,7 +394,7 @@ const characterDatabase = [
         move: 4,
         description: "ドMバイ家畜克幸",
         type: "deffencer",
-        skills: [1, 8, 10, 11]
+        skills: [1, 8, 11, 14]
     },
     {
         id: 15,
@@ -380,7 +407,8 @@ const characterDatabase = [
         description: "私が障ガイ者だから差別をしているんだねい！！",
         type: "healer",
         skills: [1, 3, 7, 11]
-    }
+    },
+    
 ];
 
 /*
