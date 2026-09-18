@@ -762,28 +762,18 @@ const battleState = {
     // プレイヤーごとに共有するブラフ使用回数
     bluffUses: {
         1: {
-            ketsukacchin: 2,
-            ketsuiki: 2,
-            dappunta: 2
+            ketsukacchin: 1,
+            ketsuiki: 1,
+            dappunta: 1
         },
         2: {
-            ketsukacchin: 2,
-            ketsuiki: 2,
-            dappunta: 2
+            ketsukacchin: 1,
+            ketsuiki: 1,
+            dappunta: 1
         }
     }
 
 };
-
-
-/* ========================================
-   DATABASE
-======================================== */
-//
-// [重複解消] getCharacter / getSkill / getCharacterSkills は
-// database/game-data.js に共通実装があるため、
-// ここでは再定義しません（party/script.js と重複していました）。
-
 
 /* ========================================
    PLAYER 1 PARTY
@@ -4130,7 +4120,7 @@ function updateControlPanel() {
                     type="button"
                     id="bluff-action-button"
                 >
-                    ブラフを<br>仕込んで待機
+                    ブラフ
                 </button>
 
 
