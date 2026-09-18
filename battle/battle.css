@@ -1686,6 +1686,78 @@ body.multiplayer-3plus .player-status-2.slot-solo {
     }
 
 
+    /*
+     * [BUGFIX / スマホ表示で3・4人目パネルが崩れる件]
+     *
+     * .player-status-3 / .player-status-4 は.player-statusを継承しない
+     * 独立クラスとして追加したため、このモバイル用ブレークポイントで
+     * .player-status に対して行っている
+     * 「絶対配置(position:absolute)→通常のフロー(position:relative)への
+     * 切り替え」がここまで一切適用されていなかった。
+     * その結果、3〜4人対戦をスマホで開くと3・4人目のパネルだけ
+     * デスクトップ基準のtop/right/left/bottom座標のまま残り、
+     * 盤面と重なったり画面外にはみ出したりしていた。
+     * .player-status-1/2と同じ扱いをここで明示的に追加する。
+     */
+    .player-status-3,
+    .player-status-4 {
+
+        position: relative;
+
+        top: auto;
+        left: auto;
+        right: auto;
+        bottom: auto;
+
+        width:
+            min(92vw, 500px);
+
+        height: auto;
+
+        transform: none;
+    }
+
+
+    /*
+     * 表示順は他の場所(getVisualSlotAssignmentsのslotOrder)と
+     * 合わせて 自分(1)→2→4→3 の時計回りにする。
+     */
+    .player-status-4 {
+        order: 4;
+    }
+
+
+    .player-status-3 {
+        order: 5;
+    }
+
+
+    /*
+     * [BUGFIX / スマホ表示で3・4人対戦中の1・2人目パネルも崩れる件]
+     *
+     * body.multiplayer-3plus .player-status-1/2（このブレークポイントの
+     * 外、CSS上より前で定義）は、3・4人対戦時にPLAYER1・2のパネルを
+     * 半分の高さにして上下に詰めるためtop/height/transformを
+     * 絶対配置の値で直接指定している。このセレクタは
+     * クラス2つぶん(body.multiplayer-3plus + .player-status-N)の
+     * 詳細度を持つため、このメディアクエリ内で.player-statusに対して
+     * 行っているtop:auto等のリセットより優先されてしまい、
+     * 3・4人対戦をスマホで開くと1・2人目のパネルまで
+     * デスクトップ基準の座標のまま重なって崩れていた。
+     * 同じ詳細度のセレクタをここ(メディアクエリの内側)に
+     * 書き直すことで、スマホ表示ではこちらを優先させる。
+     */
+    body.multiplayer-3plus .player-status-1,
+    body.multiplayer-3plus .player-status-2,
+    body.multiplayer-3plus .player-status-1.slot-solo,
+    body.multiplayer-3plus .player-status-2.slot-solo {
+        top: auto;
+        height: auto;
+        bottom: auto;
+        transform: none;
+    }
+
+
     .character-status-list {
 
         display: grid;

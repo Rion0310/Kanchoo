@@ -3428,15 +3428,40 @@ function showDirectionSelection(unit, skill) {
                         right: "→"
                     };
 
+                    /*
+                     * [BUGFIX / P3・P4の攻撃方向ボタンの矢印が実際の向きと逆になる件]
+                     *
+                     * direction("up"/"down"/"left"/"right")は盤面の絶対座標
+                     * （row/columnの増減）で管理されており、これ自体は
+                     * プレイヤーごとに変わらない。
+                     * 一方、盤面の見た目はupdateBoardPerspective()で
+                     * プレイヤーごとに次のように回転させている。
+                     *   P1: 回転なし
+                     *   P2: 上下・左右とも反転
+                     *   P3: 上下のみ反転
+                     *   P4: 左右のみ反転
+                     * 以前はP2（上下左右とも反転）専用の対応表しかなく、
+                     * P3・P4では回転していない絶対方向の矢印がそのまま
+                     * 表示されていたため、実際にユニットが攻撃する向きと
+                     * 画面上の矢印の向きが一致しないことがあった。
+                     * updateBoardPerspective()と同じflipRow/flipColumnの
+                     * 条件を使い、ボタンに表示する矢印だけを
+                     * プレイヤーの見た目に合わせて回転させる
+                     * （実際に選択されるdirection自体は絶対方向のまま変えない）。
+                     */
+                    const myPlayerNumber = Number(MY_PLAYER_NUMBER);
+                    const flipRow = myPlayerNumber === 2 || myPlayerNumber === 3;
+                    const flipColumn = myPlayerNumber === 2 || myPlayerNumber === 4;
+
+                    const visualDirection = {
+                        up: flipRow ? "down" : "up",
+                        down: flipRow ? "up" : "down",
+                        left: flipColumn ? "right" : "left",
+                        right: flipColumn ? "left" : "right"
+                    }[direction] || direction;
+
                     const displayDirection =
-                        Number(MY_PLAYER_NUMBER) === 2
-                            ? ({
-                                up: "↓",
-                                down: "↑",
-                                left: "→",
-                                right: "←"
-                            }[direction] || labels[direction])
-                            : labels[direction];
+                        labels[visualDirection] || labels[direction];
 
                     return `
                         <button

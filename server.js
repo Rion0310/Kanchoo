@@ -188,9 +188,36 @@ function sendBattleStart(room) {
 
     if (!allReady) return;
 
-    room.battleStarted = true;
-    room.activePlayers = seatedIndexes.map(index => index + 1);
-    room.expectedPlayer = room.activePlayers[0];
+    /*
+     * [BUGFIX / P2以降の操作が反映されずターンが止まる問題]
+     *
+     * この関数はroom_readyで対戦が始まる瞬間だけでなく、
+     * battle_join（BATTLE画面の接続・再接続のたびに送られる）からも
+     * 呼ばれる。以前はここを毎回無条件で実行していたため、
+     * スマホの回線切り替えや画面ロック・バックグラウンド化などで
+     * 対戦中に誰か一人でも再接続すると、
+     * 「今どのプレイヤーの手番か」を表すroom.expectedPlayerが
+     * 対戦開始時点（＝PLAYER1）へ巻き戻ってしまっていた。
+     *
+     * その結果、本来はまだ手番が回ってきていないPLAYER1以外の
+     * プレイヤー（例:PLAYER2）がbattle_stateを送っても
+     * 「sender !== room.expectedPlayer」で毎回サーバーに
+     * 弾かれ続け、そのプレイヤーの操作が相手画面に反映されず、
+     * ターンも進まなくなっていた。
+     *
+     * 対戦がすでに始まっている場合は、activePlayers・expectedPlayerを
+     * 再計算せず、既存の進行状況をそのまま維持する。
+     * （再接続してきたクライアントには、この関数の呼び出し元
+     * battle_joinハンドラが直後にroom.battleStateを送るため、
+     * 最新の状態は別途届く）
+     */
+    const alreadyStarted = room.battleStarted;
+
+    if (!alreadyStarted) {
+        room.battleStarted = true;
+        room.activePlayers = seatedIndexes.map(index => index + 1);
+        room.expectedPlayer = room.activePlayers[0];
+    }
 
     const payload = {
         type: "battle_start",
