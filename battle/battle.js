@@ -6,7 +6,7 @@
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 12;
+const BOARD_SIZE = 16;
 
 /*
  * [FIELD SIZE / 保守性]
@@ -3510,10 +3510,10 @@ function removeTarget(target) {
    (例: "damage" "revive" "remove_dead" など)を見て
    SKILL_EFFECTS から処理を引く方式に変更した。
 
-   既存の12技はDB側にeffectフィールドを持たないため、
-   これまでどおり applySkillEffectByLegacyId() の
-   switch(skill.id) がそのまま処理する
-   （挙動は一切変更していない）。
+   game-data.js の skillDatabase に定義されている
+   全13技それぞれに effect フィールドを付与し、
+   移行を完了させたため、旧来の switch(skill.id) は
+   もう使われておらず削除した。
 
    これからは、
      1. skillDatabase の技定義に effect: "revive" のように
@@ -3524,7 +3524,7 @@ function removeTarget(target) {
      3. 本当に新しい種類の効果が必要な時だけ、
         SKILL_EFFECTS に1関数追加すればよい。
    という形になり、「DBに追加したら自動で使えるか」への
-   答えがYESに近づく。
+   答えはYESになった。
 ======================================== */
 
 const SKILL_EFFECTS = {
@@ -3532,6 +3532,29 @@ const SKILL_EFFECTS = {
     // 敵へ通常ダメージ（旧: id 1, 2, 5）
     damage: (unit, skill, { enemies }, multiplier) => {
         applyDamageToTargets(unit, enemies, skill, multiplier);
+    },
+
+    /*
+     * 対象が多いほど威力が下がる攻撃（例: 貫・チョー）。
+     *
+     * 実際に命中した敵の数で power を割ることで、
+     * 「対象が多いほど威力が下がる」を表現する。
+     * 敵1体なら通常通りの威力、2体なら半分、3体なら1/3……となる。
+     */
+    damage_falloff_by_target_count: (unit, skill, { enemies }, multiplier) => {
+        if (enemies.length === 0) {
+            return;
+        }
+
+        const falloffMultiplier =
+            multiplier / enemies.length;
+
+        applyDamageToTargets(
+            unit,
+            enemies,
+            skill,
+            falloffMultiplier
+        );
     },
 
     // 防御力を無視したダメージ（旧: id 10）
@@ -3651,126 +3674,22 @@ const SKILL_EFFECTS = {
 };
 
 /*
- * 既存12技のための後方互換レイヤー。
- * skill.effect を持たない（＝現行DBのままの）技だけがここを通る。
- * 中身はリファクタ前の switch (skill.id) と完全に同じで、
- * 動作は一切変えていない。
+ * [保守性 / 移行完了]
+ * game-data.js側の全13技に effect フィールドを付与したため、
+ * IDに直接ひも付いていた旧switch文(applySkillEffectByLegacyId)は
+ * 廃止した。
+ *
+ * これ以降、新しい技を追加する場合は
+ * skillDatabase に effect: "..." を必ず指定すること。
+ * 既存のSKILL_EFFECTSにある種類を指定するだけなら
+ * battle.js は一切変更不要で動く。
+ * 本当に新しい効果が必要な時だけ、SKILL_EFFECTSに
+ * 1関数追加すればよい。
+ *
+ * effect の指定漏れ・タイポは、今までのように
+ * 「何も起きずに黙って失敗する」のではなく、
+ * ここで必ずコンソールにエラーを出す。
  */
-function applySkillEffectByLegacyId(
-    unit,
-    skill,
-    { enemies, allies, deadTargets },
-    multiplier
-) {
-    switch (skill.id) {
-        case 1:
-        case 2:
-        case 5:
-            applyDamageToTargets(
-                unit,
-                enemies,
-                skill,
-                multiplier
-            );
-            break;
-
-        case 3:
-            reviveTarget(
-                deadTargets.find(
-                    target =>
-                        target.player === unit.player
-                ),
-                skill.power
-            );
-            break;
-
-        case 4:
-            removeTarget(
-                deadTargets.find(
-                    target =>
-                        target.player === unit.player
-                )
-            );
-            break;
-
-        case 6:
-            unit.nextPowerMultiplier = 2;
-            unit.nextPowerTurn =
-                battleState.turn + 1;
-            break;
-
-        case 7:
-            healTargets(
-                allies.slice(0, 1),
-                Number(skill.power || 0)
-            );
-            break;
-
-        case 8:
-            battleState.units
-                .filter(
-                    target =>
-                        target.alive &&
-                        target.player === unit.player
-                )
-                .forEach(target => {
-                    target.move += 2;
-                });
-            break;
-
-        case 9:
-            applyDamageToTargets(
-                unit,
-                enemies,
-                skill,
-                multiplier
-            );
-
-            enemies.forEach(target => {
-                if (target.alive) {
-                    applyDamage(
-                        unit,
-                        target,
-                        skill,
-                        Number(skill.power || 0) * multiplier,
-                        true
-                    );
-                }
-            });
-            break;
-
-        case 10:
-            applyDamageToTargets(
-                unit,
-                enemies,
-                skill,
-                multiplier,
-                true
-            );
-            break;
-
-        case 11:
-            unit.guardNextTurn = true;
-            unit.guardTurn =
-                battleState.turn + 1;
-            break;
-
-        case 12:
-            enemies.forEach(target => {
-                if (unit.hp <= target.hp) {
-                    applyDamage(
-                        unit,
-                        target,
-                        skill,
-                        target.hp - unit.hp,
-                        true
-                    );
-                }
-            });
-            break;
-    }
-}
-
 function applySkillEffect(
     unit,
     skill,
@@ -3788,41 +3707,23 @@ function applySkillEffect(
 
     const context = { enemies, allies, deadTargets };
 
-    /*
-     * skill.effect が設定されている技は新方式で処理する。
-     * 既存の12技はこのフィールドを持たないため、
-     * 今まで通り下の後方互換switchに流れ、挙動は変わらない。
-     */
-    if (skill.effect) {
+    const handler =
+        SKILL_EFFECTS[skill.effect];
 
-        const handler =
-            SKILL_EFFECTS[skill.effect];
+    if (!handler) {
 
-        if (!handler) {
-
-            console.error(
-                `未定義のskill.effectです: skill.id=${skill.id}, ` +
-                `effect="${skill.effect}"。` +
-                `SKILL_EFFECTSに対応する関数を追加するか、` +
-                `game-data.jsのeffect名を見直してください。`
-            );
-
-            return;
-
-        }
-
-        handler(unit, skill, context, multiplier);
+        console.error(
+            `技 "${skill.name}"（id=${skill.id}）に有効な effect が` +
+            `設定されていません（effect="${skill.effect}"）。` +
+            `skillDatabase側にeffectフィールドを追加するか、` +
+            `SKILL_EFFECTSに対応する関数を追加してください。`
+        );
 
         return;
 
     }
 
-    applySkillEffectByLegacyId(
-        unit,
-        skill,
-        context,
-        multiplier
-    );
+    handler(unit, skill, context, multiplier);
 }
 
 function executeSkill(

@@ -149,6 +149,19 @@ const skillDatabase = [
             targetCount: "all",
             targetSide: "enemy"
         }
+    },
+    {
+        id: 1,
+        name: "貫・チョー",
+        type: "物理",
+        power: 80,
+        description: "前方一列に攻撃。対象が多いほど威力が下がる",
+        targeting: {
+            type: "direction",
+            range: 100,
+            targetCount: "all",
+            targetSide: "enemy"
+        }
     }
 ];
 
