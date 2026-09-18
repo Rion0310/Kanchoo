@@ -6,7 +6,7 @@
    キャラアイコン表示版
 ======================================== */
 
-const BOARD_SIZE = 12;
+const BOARD_SIZE = 8;
 
 /*
  * [FIELD SIZE / 保守性]
@@ -4089,6 +4089,40 @@ function applyDamage(
                 onlineSocket &&
                 onlineSocket.readyState === WebSocket.OPEN
             ) {
+                /*
+                 * [BUGFIX / 倒された側でキャラソンが一周分遅れる件]
+                 *
+                 * ここから送るkill_cut_inイベントはWebSocket経由なので、
+                 * サーバーを経由して自分自身に返ってくる（＝実際に
+                 * playCharacterSong()が呼ばれ、battleState.currentTrackCharacterIdが
+                 * 更新される）のはこの関数の実行が終わったあと、非同期に
+                 * なる。ところがこの直後、finishUnitAction()の中で
+                 * onlineSendState()が同期的に呼ばれ、その時点の
+                 * battleState.currentTrackCharacterId（＝まだ更新前の古い値）を
+                 * battle_stateとして相手にも送ってしまっていた。
+                 *
+                 * 倒された側のクライアントは
+                 *   1. kill_cut_inを受信 → 正しい曲を再生開始
+                 *   2. 直後にその古いbattle_stateを受信
+                 *      → currentTrackCharacterIdが食い違うと判定し、
+                 *        いったん元の曲に戻してしまう
+                 *   3. 後続の（正しい値を積んだ）battle_stateが届いて
+                 *      ようやく正しい曲に戻るが、そのぶん再生開始が
+                 *      遅れ、結果的に攻撃側の再生位置とズレる
+                 *      （一周分遅れて聞こえる）
+                 * という流れでズレていた。
+                 *
+                 * kill_cut_inを送る全く同じタイミングで
+                 * battleState.currentTrackCharacterIdも即座に更新して
+                 * おけば、直後のonlineSendState()には最初から正しい値が
+                 * 乗るので、この食い違いが起きなくなる。
+                 * （実際に音を鳴らし始めるのは、他のクライアントと
+                 *  タイミングを揃えるため、これまで通りサーバーから
+                 *  返ってきたイベントを受け取ってから＝playCharacterSong()
+                 *  呼び出し時のままにしてある）
+                 */
+                battleState.currentTrackCharacterId = attacker.characterId;
+
                 onlineSendBattleEvent(
                     "kill_cut_in",
                     {
@@ -4311,18 +4345,18 @@ const SKILL_EFFECTS = {
         });
     },
 
-    // 次に使う技の威力を一時的に上げる
+    // 次に使う技の威力を一時的に上げる（旧: id 6）
     double_power_next_turn: unit => {
         unit.nextPowerMultiplier = 2;
         unit.nextPowerTurn = battleState.turn + 1;
     },
 
-    // 味方単体を回復
+    // 味方単体を回復（旧: id 7）
     heal_single_ally: (unit, skill, { allies }) => {
         healTargets(allies.slice(0, 1), Number(skill.power || 0));
     },
 
-    // 自軍全体の移動力を上げる
+    // 自軍全体の移動力を上げる（旧: id 8）
     move_buff_all_allies: unit => {
         battleState.units
             .filter(
@@ -4331,7 +4365,7 @@ const SKILL_EFFECTS = {
                     target.player === unit.player
             )
             .forEach(target => {
-                target.move += 1;
+                target.move += 2;
             });
     },
 
@@ -4354,39 +4388,8 @@ const SKILL_EFFECTS = {
                 );
             }
         });
-    },
+    }
 
-    // 自爆する代わりに大ダメージを与える（新規）
-    kamikaze_damage: (unit, skill, { enemies }, multiplier) => {
-        damage_falloff_by_target_count(unit, enemies, skill, multiplier);
-        if (unit.alive) {
-            unit.hp = 0;
-            unit.alive = false;
-            addBattleLog(`${unit.name}は自爆した！`);
-        }
-    },
-
-    // 移動した距離に応じて威力が上がる（新規）
-    damage_scale_with_move_distance: (unit, skill, { enemies }, multiplier) => {
-
-    // このターン、移動前の位置から何マス移動したか。
-    const moveDistance =
-        battleState.actionOriginRow !== null &&
-        battleState.actionOriginColumn !== null
-            ? Math.abs(unit.row - battleState.actionOriginRow) +
-              Math.abs(unit.column - battleState.actionOriginColumn)
-            : 0;
-
-    // 1マスにつき威力+20%（お好みで係数は調整してください）。
-    const moveBonusMultiplier = 1 * moveDistance;
-
-    applyDamageToTargets(
-        unit,
-        enemies,
-        skill,
-        multiplier * moveBonusMultiplier
-    );
-}
 };
 
 /*
