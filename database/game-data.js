@@ -247,7 +247,7 @@ const characterDatabase = [
         hp: 150,
         attack: 150,
         defense: 100,
-        move: 3,
+        move: 4,
         description: "争いは好まない穏便派。回復担当。",
         type: "healer",
         skills: [1, 3, 7, 8]
@@ -274,7 +274,7 @@ const characterDatabase = [
         move: 5,
         description: "しおんの相棒。素早い。",
         type: "attacker",
-        skills: [1, 5, 6, 7]
+        skills: [1, 5, 6, 13]
     },
     {
         id: 5,
@@ -283,7 +283,7 @@ const characterDatabase = [
         hp: 150,
         attack: 170,
         defense: 100,
-        move: 3,
+        move: 4,
         description: "ひょうひょうとしていて様々こなせる。",
         type: "supporter",
         skills: [1, 5, 7, 8]
@@ -295,7 +295,7 @@ const characterDatabase = [
         hp: 170,
         attack: 100,
         defense: 180,
-        move: 2,
+        move: 3,
         description: "己の御髪を火山にされたバーバーへの怒りで豹変。",
         type: "deffencer",
         skills: [1, 5, 6, 14]
@@ -310,7 +310,7 @@ const characterDatabase = [
         move: 4,
         description: "どんなに足の速い生物でも影から逃れられないように、彼からは誰も...。",
         type: "attacker",
-        skills: [1, 5, 6, 9]
+        skills: [1, 5, 6, 13]
     },
     {
         id: 8,
@@ -334,7 +334,7 @@ const characterDatabase = [
         move: 3,
         description: "陰テリ系馬カス",
         type: "supporter",
-        skills: [1, 7, 8, 9]
+        skills: [1, 7, 8, 13]
     },
     {
         id: 10,
@@ -367,7 +367,7 @@ const characterDatabase = [
         hp: 200,
         attack: 150,
         defense: 150,
-        move: 1,
+        move: 2,
         description: "電車の中で弁当を食い始める生粋の関西人。",
         type: "deffencer",
         skills: [1, 2, 5, 10]

@@ -20,7 +20,19 @@ body {
         Meiryo,
         sans-serif;
 
-    overflow: hidden;
+    /*
+     * [Edgeで画面が見切れる件]
+     * このページは「はみ出したら見えなくなる」前提でoverflow: hiddenに
+     * していたが、Edge(ブラウザのツールバー/お気に入りバーの高さや
+     * 既定のズーム設定の違いなど)では、下で使っている100vhが
+     * 実際に見えている領域より大きくなり、はみ出した分がoverflow:hiddenで
+     * 完全に不可視になって「つぶれて見切れる」状態になっていた。
+     * hiddenのままだと、はみ出しても一切スクロールで確認できない
+     * （＝症状に気づいても逃げ場がない）ため、auto にしておき、
+     * 万一はみ出しても最悪スクロールで見えるようにする。
+     * ぴったり収まっている場合は今まで通りスクロールバーは出ない。
+     */
+    overflow: auto;
 }
 
 
@@ -30,7 +42,18 @@ body {
 
 .party-screen {
     width: 100%;
+
+    /*
+     * [Edgeで画面が見切れる件]
+     * 100vhはブラウザのツールバー等の分だけ実際の表示領域より
+     * 大きく計算されることがある(特にEdgeで顕著)。
+     * 100dvh(dynamic viewport height)に対応しているブラウザでは
+     * そちらを優先させ、実際に見えている高さに正しく合わせる。
+     * 100dvhを解釈できない古いブラウザは単にこの行を無視するため、
+     * 上のheight: 100vhがフォールバックとして有効なまま残る。
+     */
     height: 100vh;
+    height: 100dvh;
 
     display: flex;
     flex-direction: column;
@@ -955,6 +978,7 @@ button:disabled {
         height: auto;
 
         min-height: 100vh;
+        min-height: 100dvh;
 
         padding: 15px;
     }

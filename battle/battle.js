@@ -4214,6 +4214,27 @@ function removeTarget(target) {
     }
 }
 
+damage_scale_with_move_distance: (unit, skill, { enemies }, multiplier) => {
+
+    // このターン、移動前の位置から何マス移動したか。
+    const moveDistance =
+        battleState.actionOriginRow !== null &&
+        battleState.actionOriginColumn !== null
+            ? Math.abs(unit.row - battleState.actionOriginRow) +
+              Math.abs(unit.column - battleState.actionOriginColumn)
+            : 0;
+
+    // 1マスにつき威力+20%（お好みで係数は調整してください）。
+    const moveBonusMultiplier = moveDistance * 1;
+
+    applyDamageToTargets(
+        unit,
+        enemies,
+        skill,
+        multiplier * moveBonusMultiplier
+    );
+}
+
 /* ========================================
    SKILL EFFECT REGISTRY
 
