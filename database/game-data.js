@@ -178,11 +178,11 @@ const skillDatabase = [
     {
         id: 14,
         name: "神風カンチョー",
-        power: 250,
+        power: 200,
         effect: "kamikaze_damage",
         description: "自らを犠牲に、対象へ大ダメージを与える。",
         targeting: {
-            type: "move_range",
+            type: "direction",
             range: 1,
             targetCount: "all",
             targetSide: "enemy"
@@ -239,7 +239,8 @@ const characterDatabase = [
         move: 4,
         description: "りおんが我が道往くためにデスカンチョーに堕ちた姿。",
         type: "attacker",
-        skills: [1, 2, 4, 5]
+        skills: [1, 2, 4, 5],
+        song: "../audio/death.mp3"
     },
     {
         id: 2,
@@ -251,7 +252,8 @@ const characterDatabase = [
         move: 4,
         description: "争いは好まない穏便派。回復担当。",
         type: "healer",
-        skills: [1, 3, 7, 8]
+        skills: [1, 3, 7, 8],
+        song: "../audio/kiyotake.mp3"
     },
     {
         id: 3,
@@ -263,7 +265,8 @@ const characterDatabase = [
         move: 4,
         description: "弱っちい。なぜなら女だから。",
         type: "healer",
-        skills: [1, 3, 7, 10]
+        skills: [1, 3, 7, 10],
+        song: "../audio/momoko.mp3"
     },
     {
         id: 4,
@@ -275,7 +278,8 @@ const characterDatabase = [
         move: 5,
         description: "しおんの相棒。素早い。",
         type: "attacker",
-        skills: [1, 5, 6, 13]
+        skills: [1, 5, 6, 13],
+        song: "../audio/rion.mp3"
     },
     {
         id: 5,
@@ -287,7 +291,8 @@ const characterDatabase = [
         move: 4,
         description: "ひょうひょうとしていて様々こなせる。",
         type: "supporter",
-        skills: [1, 5, 7, 8]
+        skills: [1, 5, 7, 8],
+        song: "../audio/takeshi.mp3"
     },
     {
         id: 6,
@@ -323,7 +328,8 @@ const characterDatabase = [
         move: 5,
         description: "絶世の醜女",
         type: "attacker",
-        skills: [1, 2, 9, 15]
+        skills: [1, 2, 9, 13],
+        song: "../audio/yuuna.mp3"
     },
     {
         id: 9,
@@ -347,7 +353,8 @@ const characterDatabase = [
         move: 6,
         description: "ニート。",
         type: "attacker",
-        skills: [1, 6, 9, 15]
+        skills: [1, 6, 9, 15],
+        song: "../audio/shion.mp3"
     },
     {
         id: 11,
@@ -371,7 +378,8 @@ const characterDatabase = [
         move: 2,
         description: "電車の中で弁当を食い始める生粋の関西人。",
         type: "deffencer",
-        skills: [1, 2, 5, 10]
+        skills: [1, 2, 5, 10],
+        song: "../audio/hasuo.mp3"
     },
     {
         id: 13,
@@ -383,7 +391,8 @@ const characterDatabase = [
         move: 6,
         description: "還暦間近のジジイ。",
         type: "attacker",
-        skills: [1, 9, 11, 12]
+        skills: [1, 9, 11, 12],
+        song: "../audio/kiyoshi.mp3"
     },
     {
         id: 14,
@@ -395,7 +404,8 @@ const characterDatabase = [
         move: 4,
         description: "ドMバイ家畜克幸",
         type: "deffencer",
-        skills: [1, 8, 11, 14]
+        skills: [1, 8, 11, 14],
+        song: "../audio/katsuyuki.mp3"
     },
     {
         id: 15,
@@ -409,7 +419,19 @@ const characterDatabase = [
         type: "healer",
         skills: [1, 3, 7, 11]
     },
-    
+    {
+        id: 16,
+        name: "就活ゆうな",
+        image: "../images/yuuna2.png",
+        hp: 150,
+        attack: 250,
+        defense: 80,
+        move: 5,
+        description: "採用されたぞおおおおおおお正社員んんんんんんんん動物看護士の資格生かせるうううううううううううう",
+        type: "healer",
+        skills: [1, 2, 9, 15],
+        song: "../audio/yuuna2.mp3"
+    }
 ];
 
 /*
@@ -427,52 +449,34 @@ const characterSkillsDatabase = characterDatabase.reduce(
     {}
 );
 
-const characterSongDatabase = {
-    1: {
-        path: "../audio/death.mp3",
-        title: "デスリオン"
+/*
+ * [DB統合 / 保守性]
+ * characterSkillsDatabaseと同じ理由・同じやり方で、
+ * characterDatabase側の各キャラクターが持つsongフィールドから
+ * 自動生成する。以前はここに「id → {path, title}」という
+ * 別オブジェクトを独立して持っており、キャラクターを追加/削除しても
+ * こちら側を直し忘れて気づけない、という同じ問題を抱えていた。
+ *
+ * また、titleはほぼ character.name (+「のテーマ」) をそのまま
+ * 文字列として複製しているだけだったため、pathだけを持たせれば
+ * 十分と判断し廃止した。表示用のラベルが必要な場面
+ * (再生開始時のconsole.logなど)は、battle.js側で
+ * getCharacter(characterId).name から都度組み立てる。
+ *
+ * window.MONSTER_WAR_DATA.characterSongDatabase の形は
+ * 「id → 曲パス(文字列)」に変わったため、battle.js側の
+ * playCharacterSong()もこれに合わせて更新済み。
+ * 曲を持たないキャラクター(song未指定)はここに含まれない。
+ */
+const characterSongDatabase = characterDatabase.reduce(
+    (map, character) => {
+        if (character.song) {
+            map[character.id] = character.song;
+        }
+        return map;
     },
-
-    2: {
-        path: "../audio/kiyotake.mp3",
-        title: "清武のテーマ"
-    },
-
-    3: {
-        path: "../audio/momoko.mp3",
-        title: "桃子のテーマ"
-    },
-
-    4: {
-        path: "../audio/rion.mp3",
-        title: "りおんのテーマ"
-    },
-
-    5: {
-        path: "../audio/takeshi.mp3",
-        title: "武のテーマ"
-    },
-
-    8: {
-        path: "../audio/yuuna.mp3",
-        title: "ゆうなのテーマ"
-    },
-
-    10: {
-        path: "../audio/shion.mp3",
-        title: "しおん"
-    },
-
-    12: {
-        path: "../audio/hasuo.mp3",
-        title: "hasuoのテーマ"
-    },
-
-    13: {
-        path: "../audio/kiyoshi.mp3",
-        title: "きよしのテーマ"
-    }
-};
+    {}
+);
 
 // totalを自動計算
 characterDatabase.forEach(character => {

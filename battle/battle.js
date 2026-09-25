@@ -202,6 +202,15 @@ let onlinePlayerNames = {
 };
 let onlineBattleStarted = false;
 
+// [キル演出] 自分が送信したkill_cut_inを識別するためのID管理。
+const sentKillEventIds = new Set();
+let killEventCounter = 0;
+
+function createKillEventId() {
+    killEventCounter += 1;
+    return `${ONLINE_SESSION_ID}-${Date.now()}-${killEventCounter}`;
+}
+
 function getOnlineWebSocketUrl() {
     const protocol =
         window.location.protocol === "https:"
@@ -613,6 +622,13 @@ function connectOnlineBattle() {
             if (message.event === "kill_cut_in") {
                 const attacker = message.data;
 
+                // 自分が送ったキルイベントが返ってきた場合は、
+                // 送信時にすでに再生済みなので無視する。
+                if (attacker?.killId && sentKillEventIds.has(attacker.killId)) {
+                    sentKillEventIds.delete(attacker.killId);
+                    return;
+                }
+
                 if (attacker) {
                     showKillCutIn(attacker);
 
@@ -770,7 +786,18 @@ function playCharacterSong(characterId) {
      * titleはほぼcharacter.nameの複製でしかなかったため廃止)。
      * ログ表示用のラベルは、都度getCharacter()でキャラ名を引いて作る。
      */
-    const songPath = characterSongDatabase?.[characterId];
+    /*
+     * [BUGFIX / キル時に無音になる件]
+     * 古いgame-data.js（{path, title}形式）がキャッシュ等で読まれていると
+     * オブジェクトがそのままURLになり "[object Object]" を読みに行って
+     * 404→無音になっていた。文字列・オブジェクトどちらの形式でも
+     * パス文字列を取り出せるようにする。
+     */
+    const songEntry = characterSongDatabase?.[characterId];
+    const songPath =
+        typeof songEntry === "string"
+            ? songEntry
+            : (songEntry && typeof songEntry.path === "string" ? songEntry.path : "");
 
     // [キャラソン復元] 「今流れているべき曲」をこのキャラのものにする。
     battleState.currentTrackCharacterId = characterId;
@@ -4192,11 +4219,30 @@ function applyDamage(
                  *  返ってきたイベントを受け取ってから＝playCharacterSong()
                  *  呼び出し時のままにしてある）
                  */
-                battleState.currentTrackCharacterId = attacker.characterId;
+                /*
+                 * [BUGFIX / キルした側でキャラソンが流れない件]
+                 * サーバーはbattle_eventを送信元へ返さない
+                 * （battle_logと同じ挙動）ため、「自分に返ってきたら
+                 * 再生する」前提だとキルした本人の画面ではカットインも
+                 * キャラソンも一切発生しなかった。さらに直前で
+                 * currentTrackCharacterIdだけ先に更新していたため、
+                 * 以後のbattle_stateでも「曲は変わっていない」と判定され
+                 * 復旧もしなかった。
+                 * 送信元ではその場でカットイン＋キャラソンを再生し、
+                 * 相手にはイベントを送る。万一サーバーが送信元へも
+                 * 返す設定になっていても二重再生しないよう、
+                 * killIdで自分発のイベントを判別して無視する。
+                 */
+                const killId = createKillEventId();
+                sentKillEventIds.add(killId);
+
+                showKillCutIn(attacker);
+                playCharacterSong(attacker.characterId);
 
                 onlineSendBattleEvent(
                     "kill_cut_in",
                     {
+                        killId,
                         unitId: attacker.unitId,
                         player: attacker.player,
                         name: attacker.name,
