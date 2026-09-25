@@ -182,8 +182,8 @@ const skillDatabase = [
         effect: "kamikaze_damage",
         description: "自らを犠牲に、対象へ大ダメージを与える。",
         targeting: {
+            type: "move_range",
             type: "direction",
-            range: 1,
             targetCount: "all",
             targetSide: "enemy"
         }
