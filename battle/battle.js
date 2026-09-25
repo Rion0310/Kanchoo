@@ -5757,7 +5757,7 @@ function updateTurnIndicators() {
 
 /* ========================================
    UNIT DETAIL OVERLAY
-   盤面のキャラ / ステータスカードにカーソルを乗せると、
+   ステータスカードにカーソルを乗せると、
    画面全体にステータス・所持技・技の説明を表示する。
 
    ・pointer-events:none のオーバーレイなので、
@@ -6011,16 +6011,7 @@ function getHoveredUnit(target) {
         return getUnit(card.dataset.unitId) || null;
     }
 
-    const cell = target.closest(".board-cell");
-
-    if (cell && battleField?.contains(cell)) {
-
-        const row = Number(cell.dataset.row);
-        const column = Number(cell.dataset.column);
-
-        return getUnitAt(row, column) || getDeadUnitAt(row, column) || null;
-    }
-
+    // 盤面(マス)のホバーでは表示しない。ステータスカードのみ。
     return null;
 }
 
