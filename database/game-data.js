@@ -178,7 +178,7 @@ const skillDatabase = [
     {
         id: 14,
         name: "神風カンチョー",
-        power: 200,
+        power: 999,
         effect: "kamikaze_damage",
         description: "自らを犠牲に、対象へ大ダメージを与える。",
         targeting: {

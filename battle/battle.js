@@ -16,7 +16,7 @@
  * 人数が確定したタイミングで値を更新してからcreateBoard()を
  * 呼び直すことで両方のケースに追従させる。
  */
-let BOARD_SIZE = 16;
+let BOARD_SIZE = 12;
 
 /*
  * [FIELD SIZE / 保守性]
@@ -127,6 +127,12 @@ const IS_SPECTATOR =
  * room.jsの ../battle/battle.html?player=N のNは1〜4になり得るので、
  * 以前の「2以外は全部1」という決め打ちをやめ、1〜4の範囲だけ受け付ける。
  */
+/*
+ * [フィールド形状] ?map=マップID が付いていれば、選択画面を出さずにそのマップで始める。
+ * (ROOM画面側でマップを選べるようにする場合は、遷移URLにこれを付ければよい)
+ */
+const URL_MAP_ID = battleUrlParams.get("map") || "";
+
 const REQUESTED_PLAYER_NUMBER = Number(battleUrlParams.get("player"));
 
 let MY_PLAYER_NUMBER = IS_SPECTATOR
@@ -228,6 +234,9 @@ function serializeBattleState() {
         // [4人対戦対応] 参加人数・脱落者も同期する。
         activePlayers: battleState.activePlayers,
         eliminatedPlayers: battleState.eliminatedPlayers,
+        // [フィールド形状]
+        mapId: battleState.mapId,
+        mapSelecting: !!battleState.mapSelecting,
         selectedUnitId: battleState.selectedUnitId,
         movableCells: battleState.movableCells,
         units: battleState.units,
@@ -355,9 +364,21 @@ function applyOnlineState(state) {
             ? state.currentTrackCharacterId
             : null;
 
-    // 参加人数が変わっていれば(=試合開始直後やスペクテーター参加時など)
-    // 城の配置も現在のactivePlayersに合わせて描き直す。
-    if (battleState.activePlayers.join(",") !== previousActivePlayersKey) {
+    /*
+     * [フィールド形状]
+     * マップが変わっていれば(ホストが選んだ直後・途中参加・再接続など)
+     * BOARD_SIZEを合わせて盤面ごと作り直す。createBoard()は城も描き直す。
+     */
+    const previousMapId = battleState.mapId;
+
+    battleState.mapSelecting = !!state.mapSelecting;
+
+    if (state.mapId && state.mapId !== previousMapId) {
+        applyMap(state.mapId, battleState.activePlayers.length);
+        createBoard();
+    } else if (battleState.activePlayers.join(",") !== previousActivePlayersKey) {
+        // 参加人数が変わっていれば(=試合開始直後やスペクテーター参加時など)
+        // 城の配置も現在のactivePlayersに合わせて描き直す。
         renderCastles();
     }
 
@@ -365,6 +386,7 @@ function applyOnlineState(state) {
     renderUnitIcons();
     renderPlayerPanels();
     updateControlPanel();
+    updateMapSelectOverlay();
 
     if (
         !previousGameOver && battleState.gameOver &&
@@ -560,7 +582,18 @@ function connectOnlineBattle() {
              * ここで実際の参加人数が確定するので、必要ならBOARD_SIZEを
              * 16に更新し、下のcreateBoard()で盤面ごと作り直す。
              */
-            BOARD_SIZE = getBoardSizeForPlayerCount(battleState.activePlayers.length);
+            /*
+             * [フィールド形状]
+             * URLで?map=が指定されていればそれを使う。無ければ
+             * 参加者の中で一番若い番号の人(ホスト)が選択画面で選ぶ。
+             * 選び終わるまでは暫定で既定マップを表示しておく。
+             */
+            const playerCount = battleState.activePlayers.length;
+            const presetMapId =
+                isMapAvailableFor(URL_MAP_ID, playerCount) ? URL_MAP_ID : null;
+
+            applyMap(presetMapId || getDefaultMapId(playerCount), playerCount);
+            battleState.mapSelecting = !presetMapId;
 
             /*
              * [PARTY FIX 4: battle_startのpartyを唯一の初期値にする]
@@ -602,6 +635,7 @@ function connectOnlineBattle() {
             renderUnitIcons();
             renderPlayerPanels();
             updateControlPanel();
+            updateMapSelectOverlay();
 
             // 参加者の中で一番若い番号の人が最初の状態を送信する。
             if (
@@ -1121,13 +1155,416 @@ function getPlayerColorRgba(player, alpha = 1) {
  * それだと後からBOARD_SIZEが12に変わっても城の位置が古い16のままズレて
  * しまう。呼ばれるたびにその時点のBOARD_SIZEで座標を作り直す関数にした。
  */
-function getSiegeCastles() {
+/* ========================================
+   BATTLE MAPS (フィールドの形状)
+========================================
+
+   盤面の形は文字の地図で定義する。1文字 = 1マス、1行目が盤面の一番上。
+     #      : 通常のマス
+     X      : 壁（見えるが、移動も技も通さない）
+     .      : 存在しないマス（表示されず、移動も技も通さない）
+     1〜4   : そのプレイヤーの城（通常のマスとして扱う）
+
+   ルール
+   ・地図は正方形(行数 = 各行の文字数)にする。
+     形はXや.で自由に削れるので、外枠だけ正方形にしておけばよい。
+     マス数は行数から自動で決まる(BOARD_SIZE)。
+   ・城は 1=左下 / 2=右上 / 3=左上 / 4=右下 の付近に置く。
+     (各プレイヤーの画面で「自分の城が左下」に見えるよう盤面を反転表示するため)
+   ・初期配置は城から歩いて近いマスへ自動で並ぶ(getFormationPositions)。
+     城の周りに通常マスを6つ以上用意しておくこと。
+   ・players は「何人対戦で選べるか」。3人対戦では4つ目の城は普通のマスになる。
+   ・新しいマップはここに1件追加するだけで、選択画面に自動で並ぶ。
+*/
+/*
+ * 地図の文字 → マスの種類（と画像） の対応表。
+ *
+ * 書き方は2通り。
+ *   "X": "wall"                                   … 種類だけ
+ *   "a": { type: "floor", image: "../images/tiles/grass.png" }
+ *                                                 … 種類 + そのマスに敷く画像
+ *
+ * type は次のどれか。
+ *   "floor"   通常のマス
+ *   "wall"    壁（移動も技も通さない）
+ *   "void"    存在しないマス（表示されず、移動も技も通さない）
+ *   "castle1"〜"castle4"  そのプレイヤーの城（通常のマスとして扱う）
+ *
+ * 同じ「通常のマス」でも文字ごとに別の画像を割り当てられる
+ * (例: a=草原, d=石畳, e=砂地 … すべて type:"floor")。
+ * 画像を指定しなければ今までどおりの市松模様のマスになる。
+ * 対応表に無い文字は「存在しないマス」扱い。
+ */
+const MAP_LEGEND = {
+    "#": "floor",
+    "X": "wall",
+    ".": "void",
+    " ": "void",
+    "1": "castle1",
+    "2": "castle2",
+    "3": "castle3",
+    "4": "castle4"
+
+    // 画像付きの例（画像ファイルを用意したらコメントを外す）:
+    // , "a": { type: "floor", image: "../images/tiles/grass.png" }
+    // , "b": { type: "wall",  image: "../images/tiles/rock.png" }
+    // , "c": { type: "floor", image: "../images/tiles/sand.png" }
+};
+
+function getLegendEntry(char) {
+    const entry = MAP_LEGEND[char];
+
+    if (!entry) {
+        return { type: "void", image: "" };
+    }
+
+    if (typeof entry === "string") {
+        return { type: entry, image: "" };
+    }
+
     return {
-        1: { row: BOARD_SIZE, column: 1 },       // 左下
-        2: { row: 1, column: BOARD_SIZE },       // 右上
-        3: { row: 1, column: 1 },                // 左上
+        type: String(entry.type || "void"),
+        image: String(entry.image || "")
+    };
+}
+
+/*
+ * 地図を「正方形のマス目」に整える。
+ * 行ごとの長さがバラバラ・縦横の数が違う地図でも、
+ * 大きいほうの辺に合わせた正方形の中央に置き、余りは存在しないマスで埋める。
+ * (盤面の表示・自分視点への反転は正方形の枠を前提にしているため)
+ */
+const normalizedMapCache = new WeakMap();
+
+function getNormalizedMap(map) {
+    if (!map) {
+        return null;
+    }
+
+    if (normalizedMapCache.has(map)) {
+        return normalizedMapCache.get(map);
+    }
+
+    const height = map.rows.length;
+    const width = Math.max(...map.rows.map(line => [...line].length));
+    const size = Math.max(height, width);
+
+    const rowOffset = Math.floor((size - height) / 2);
+    const columnOffset = Math.floor((size - width) / 2);
+
+    const grid = Array.from({ length: size }, () => Array(size).fill("."));
+
+    map.rows.forEach((line, rowIndex) => {
+        [...line].forEach((char, columnIndex) => {
+            grid[rowIndex + rowOffset][columnIndex + columnOffset] = char;
+        });
+    });
+
+    const normalized = { size, grid };
+    normalizedMapCache.set(map, normalized);
+
+    return normalized;
+}
+
+const BATTLE_MAPS = {
+    classic_2: {
+        name: "クラシック",
+        description: "何もない正方形。基本の戦場。",
+        players: [2],
+        rows: [
+            "###########2",
+            "############",
+            "############",
+            "############",
+            "############",
+            "############",
+            "############",
+            "############",
+            "############",
+            "############",
+            "############",
+            "1###########"
+        ]
+    },
+
+    diagonal_2: {
+        name: "斜めの回廊",
+        description: "左上と右下が欠けた斜めの戦場。正面衝突が起きやすい。",
+        players: [2],
+        rows: [
+            ".....######2",
+            "....########",
+            "...#########",
+            "..##########",
+            ".###########",
+            "############",
+            "############",
+            "###########.",
+            "##########..",
+            "#########...",
+            "########....",
+            "1######....."
+        ]
+    },
+
+    pillars_2: {
+        name: "柱の森",
+        description: "壁が点在する盤面。技の射線を切って戦える。",
+        players: [2],
+        rows: [
+            "###########2",
+            "######X#####",
+            "###X##X#####",
+            "###X########",
+            "########XXX#",
+            "#####XX#####",
+            "#####XX#####",
+            "#XXX########",
+            "########X###",
+            "#####X##X###",
+            "#####X######",
+            "1###########"
+        ]
+    },
+
+    river_2: {
+        name: "二本橋",
+        description: "中央を壁が横切り、通れるのは左右の橋だけ。",
+        players: [2],
+        rows: [
+            "###########2",
+            "############",
+            "############",
+            "############",
+            "############",
+            "X##XXXXXX##X",
+            "X##XXXXXX##X",
+            "############",
+            "############",
+            "############",
+            "############",
+            "1###########"
+        ]
+    },
+
+    classic_4: {
+        name: "クラシック",
+        description: "何もない正方形。基本の戦場。",
+        players: [3, 4],
+        rows: [
+            "3##############2",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "################",
+            "1##############4"
+        ]
+    },
+
+    lake_4: {
+        name: "中央の湖",
+        description: "盤面の中央がぽっかり空いた形。外周を回って攻める。",
+        players: [3, 4],
+        rows: [
+            "3##############2",
+            "################",
+            "################",
+            "################",
+            "################",
+            "######....######",
+            "#####......#####",
+            "#####......#####",
+            "#####......#####",
+            "#####......#####",
+            "######....######",
+            "################",
+            "################",
+            "################",
+            "################",
+            "1##############4"
+        ]
+    },
+
+    cross_4: {
+        name: "十字の城壁",
+        description: "十字の壁で4区画に分かれ、門を通って隣へ攻め込む。",
+        players: [3, 4],
+        rows: [
+            "3######XX######2",
+            "#######XX#######",
+            "#######XX#######",
+            "################",
+            "################",
+            "#######XX#######",
+            "#######XX#######",
+            "XXX##XXXXXX##XXX",
+            "XXX##XXXXXX##XXX",
+            "#######XX#######",
+            "#######XX#######",
+            "################",
+            "################",
+            "#######XX#######",
+            "#######XX#######",
+            "1######XX######4"
+        ]
+    },
+
+    fortress_4: {
+        name: "四つの砦",
+        description: "各辺の中央がえぐれ、四隅の砦がくっきり分かれた形。",
+        players: [3, 4],
+        rows: [
+            "3####......####2",
+            "#####......#####",
+            "################",
+            "################",
+            "################",
+            "..############..",
+            "..############..",
+            "..############..",
+            "..############..",
+            "..############..",
+            "..############..",
+            "################",
+            "################",
+            "################",
+            "#####......#####",
+            "1####......####4"
+        ]
+    }
+};
+
+function getMapsForPlayerCount(playerCount) {
+    const count = Number(playerCount) || 2;
+
+    return Object.entries(BATTLE_MAPS)
+        .filter(([, map]) => map.players.includes(count))
+        .map(([id, map]) => ({ id, ...map }));
+}
+
+function isMapAvailableFor(mapId, playerCount) {
+    return !!BATTLE_MAPS[mapId] &&
+        BATTLE_MAPS[mapId].players.includes(Number(playerCount) || 2);
+}
+
+function getDefaultMapId(playerCount) {
+    return getMapsForPlayerCount(playerCount)[0]?.id || null;
+}
+
+function getCurrentMap() {
+    return BATTLE_MAPS[battleState?.mapId] || null;
+}
+
+/*
+ * マップを切り替える。BOARD_SIZEも地図の行数に合わせる。
+ * 盤面の描き直し(createBoard)とユニット生成(createUnits)は呼び出し側で行う。
+ */
+function applyMap(mapId, playerCount) {
+    const id =
+        isMapAvailableFor(mapId, playerCount)
+            ? mapId
+            : getDefaultMapId(playerCount);
+
+    battleState.mapId = id;
+
+    const map = BATTLE_MAPS[id];
+
+    BOARD_SIZE =
+        map
+            ? getNormalizedMap(map).size
+            : getBoardSizeForPlayerCount(playerCount);
+}
+
+function getMapChar(row, column) {
+    const map = getCurrentMap();
+
+    if (!map) {
+        return "#";
+    }
+
+    return getNormalizedMap(map).grid[row - 1]?.[column - 1] ?? ".";
+}
+
+function isInsideBoard(row, column) {
+    return (
+        row >= 1 &&
+        row <= BOARD_SIZE &&
+        column >= 1 &&
+        column <= BOARD_SIZE
+    );
+}
+
+function getCellTerrain(row, column) {
+    if (!isInsideBoard(row, column)) {
+        return "void";
+    }
+
+    const { type } = getLegendEntry(getMapChar(row, column));
+
+    if (type === "wall") return "wall";
+    if (type === "floor" || type.startsWith("castle")) return "floor";
+
+    return "void";
+}
+
+// そのマスに敷く画像(対応表で指定されていれば)。無ければ空文字。
+function getCellImage(row, column) {
+    if (!isInsideBoard(row, column)) {
+        return "";
+    }
+
+    return getLegendEntry(getMapChar(row, column)).image;
+}
+
+/*
+ * 歩ける・技が通るマスかどうか。
+ * 以前の「盤面の外か」判定はすべてこれに置き換えた。
+ * 壁/存在しないマスは移動も技も通さない。
+ */
+function isPlayableCell(row, column) {
+    return getCellTerrain(row, column) === "floor";
+}
+
+/*
+ * 城の位置。地図に1〜4の文字があればそこ、無ければ従来どおり4隅。
+ * [1vs1限定サイズ変更] 呼ばれるたびに現在のBOARD_SIZE/マップで作り直す。
+ */
+function getSiegeCastles() {
+    const castles = {
+        1: { row: BOARD_SIZE, column: 1 },        // 左下
+        2: { row: 1, column: BOARD_SIZE },        // 右上
+        3: { row: 1, column: 1 },                 // 左上
         4: { row: BOARD_SIZE, column: BOARD_SIZE } // 右下
     };
+
+    const map = getCurrentMap();
+
+    if (map) {
+        getNormalizedMap(map).grid.forEach((line, rowIndex) => {
+            line.forEach((char, columnIndex) => {
+                const { type } = getLegendEntry(char);
+
+                if (type.startsWith("castle")) {
+                    castles[Number(type.slice(6))] = {
+                        row: rowIndex + 1,
+                        column: columnIndex + 1
+                    };
+                }
+            });
+        });
+    }
+
+    return castles;
 }
 
 const battleState = {
@@ -1146,6 +1583,14 @@ const battleState = {
      * この配列だけを基準に動く。
      */
     activePlayers: [1, 2],
+
+    /*
+     * [フィールド形状] 使用中のマップID(BATTLE_MAPSのキー)と、
+     * 対戦開始前のマップ選択中かどうか。オンラインでは同期対象。
+     */
+    mapId: null,
+
+    mapSelecting: false,
 
     /*
      * 脱落済みのプレイヤー番号一覧。
@@ -1562,6 +2007,21 @@ function createBoard() {
             }
 
 
+            // [フィールド形状] 壁・存在しないマス
+            const terrain = getCellTerrain(row, column);
+
+            if (terrain !== "floor") {
+                cell.classList.add(`terrain-${terrain}`);
+            }
+
+            const tileImage = getCellImage(row, column);
+
+            if (tileImage && terrain !== "void") {
+                cell.classList.add("has-tile-image");
+                cell.style.backgroundImage = `url("${tileImage}")`;
+            }
+
+
             cell.addEventListener(
                 "click",
                 () => {
@@ -1589,8 +2049,12 @@ function createBoard() {
 
     if (fieldArea) {
 
+        const mapName = getCurrentMap()?.name;
+
         fieldArea.dataset.boardLabel =
-            `${BOARD_SIZE} × ${BOARD_SIZE}`;
+            mapName
+                ? `${mapName} · ${BOARD_SIZE} × ${BOARD_SIZE}`
+                : `${BOARD_SIZE} × ${BOARD_SIZE}`;
 
     }
 
@@ -1976,57 +2440,74 @@ function getFormationPositions(
 
     /*
      * 攻城戦の初期配置
-     * BOARD_SIZEに追従して、盤面外へ出ないようにする。
      *
-     * [4人対戦対応]
-     * 4隅すべてに、それぞれの城を囲むL字型の初期配置を用意した。
-     * PLAYER 1：左下の城をL字に囲む
-     * PLAYER 2：右上の城をL字に囲む
-     * PLAYER 3：左上の城をL字に囲む
-     * PLAYER 4：右下の城をL字に囲む
+     * [フィールド形状]
+     * 以前は4隅それぞれの「城を囲むL字」を座标で直接書いていたが、
+     * マップの形が自由になったため、城から歩いて近いマスを自動で選ぶ。
+     * 並び順は「歩数が近い順(城から一直線のマスを少し優先)」。
+     * 何も無い正方形の盤面では、以前と全く同じL字の6マスになる。
      */
+    const castle = getSiegeCastles()[player];
 
-    if (player === 2) {
-        return [
-            { row: 2, column: BOARD_SIZE },
-            { row: 3, column: BOARD_SIZE },
-            { row: 4, column: BOARD_SIZE },
-            { row: 1, column: BOARD_SIZE - 1 },
-            { row: 1, column: BOARD_SIZE - 2 },
-            { row: 1, column: BOARD_SIZE - 3 }
-        ];
+    if (!castle) {
+        return [];
     }
 
-    if (player === 3) {
-        return [
-            { row: 2, column: 1 },
-            { row: 3, column: 1 },
-            { row: 4, column: 1 },
-            { row: 1, column: 2 },
-            { row: 1, column: 3 },
-            { row: 1, column: 4 }
-        ];
+    const otherCastleKeys = new Set(
+        Object.values(getSiegeCastles())
+            .map(other => `${other.row},${other.column}`)
+    );
+
+    const found = [];
+    const visited = new Set([`${castle.row},${castle.column}`]);
+    const queue = [{ row: castle.row, column: castle.column, distance: 0 }];
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+
+        [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([dr, dc]) => {
+            const row = current.row + dr;
+            const column = current.column + dc;
+            const key = `${row},${column}`;
+
+            if (visited.has(key) || !isPlayableCell(row, column)) {
+                return;
+            }
+
+            visited.add(key);
+
+            const next = { row, column, distance: current.distance + 1 };
+
+            queue.push(next);
+
+            if (!otherCastleKeys.has(key)) {
+                found.push(next);
+            }
+        });
     }
 
-    if (player === 4) {
-        return [
-            { row: BOARD_SIZE - 1, column: BOARD_SIZE },
-            { row: BOARD_SIZE - 2, column: BOARD_SIZE },
-            { row: BOARD_SIZE - 3, column: BOARD_SIZE },
-            { row: BOARD_SIZE, column: BOARD_SIZE - 1 },
-            { row: BOARD_SIZE, column: BOARD_SIZE - 2 },
-            { row: BOARD_SIZE, column: BOARD_SIZE - 3 }
-        ];
-    }
+    const straightness = cell =>
+        Math.abs(
+            Math.abs(cell.row - castle.row) -
+            Math.abs(cell.column - castle.column)
+        );
 
-    return [
-        { row: BOARD_SIZE - 1, column: 1 },
-        { row: BOARD_SIZE - 2, column: 1 },
-        { row: BOARD_SIZE - 3, column: 1 },
-        { row: BOARD_SIZE, column: 2 },
-        { row: BOARD_SIZE, column: 3 },
-        { row: BOARD_SIZE, column: 4 }
-    ];
+    // 城と同じ行・列(=城から一直線)のマスを少し優先する。
+    // これで何も無い正方形の盤面では、以前と同じ「縦3・横3のL字」になる。
+    const priority = cell =>
+        cell.distance +
+        (cell.row === castle.row || cell.column === castle.column ? 0 : 1.5);
+
+    return found
+        .sort(
+            (a, b) =>
+                priority(a) - priority(b) ||
+                straightness(b) - straightness(a) ||
+                a.row - b.row ||
+                a.column - b.column
+        )
+        .slice(0, window.MONSTER_WAR_CONSTANTS?.PARTY_MAX_SIZE || 6)
+        .map(({ row, column }) => ({ row, column }));
 }
 
 
@@ -2462,12 +2943,8 @@ function getMovableCells(unit) {
                     current.column +
                     direction.column;
 
-                if (
-                    row < 1 ||
-                    row > BOARD_SIZE ||
-                    column < 1 ||
-                    column > BOARD_SIZE
-                ) {
+                // [フィールド形状] 盤面の外・壁・存在しないマスは通れない
+                if (!isPlayableCell(row, column)) {
                     return;
                 }
 
@@ -2529,7 +3006,7 @@ function selectUnit(
         return;
     }
 
-    if (battleState.gameOver) {
+    if (battleState.gameOver || battleState.mapSelecting) {
         return;
     }
 
@@ -2659,7 +3136,12 @@ function handleCellClick(
     column
 ) {
 
-    if (battleState.gameOver) {
+    if (battleState.gameOver || battleState.mapSelecting) {
+        return;
+    }
+
+    // [フィールド形状] 壁・存在しないマスはクリックしても何も起きない
+    if (!isPlayableCell(row, column)) {
         return;
     }
 
@@ -3358,12 +3840,8 @@ function getFrontCells(unit, range, direction) {
         const row = unit.row + offset.row * distance;
         const column = unit.column + offset.column * distance;
 
-        if (
-            row < 1 ||
-            row > BOARD_SIZE ||
-            column < 1 ||
-            column > BOARD_SIZE
-        ) {
+        // [フィールド形状] 壁・存在しないマスで射線が止まる
+        if (!isPlayableCell(row, column)) {
             break;
         }
 
@@ -3374,20 +3852,36 @@ function getFrontCells(unit, range, direction) {
 }
 
 function getMoveRangeTargetCells(unit) {
-    const cells = [];
+    /*
+     * [フィールド形状] 「移動範囲内」の技は、直線距離ではなく
+     * 実際に歩ける範囲(壁・存在しないマスを回り込んだ歩数)で判定する。
+     * コマ自体は技の対象なので、ここではコマを障害物として扱わない。
+     */
+    const maxDistance = Number(unit.move) || 0;
+    const cells = [{ row: unit.row, column: unit.column }];
+    const visited = new Set([`${unit.row},${unit.column}`]);
+    const queue = [{ row: unit.row, column: unit.column, distance: 0 }];
 
-    for (let row = 1; row <= BOARD_SIZE; row++) {
-        for (let column = 1; column <= BOARD_SIZE; column++) {
-            const distance =
-                Math.abs(unit.row - row) +
-                Math.abs(unit.column - column);
+    while (queue.length > 0) {
+        const current = queue.shift();
 
-            if (distance > unit.move) {
-                continue;
-                }
-
-            cells.push({ row, column });
+        if (current.distance >= maxDistance) {
+            continue;
         }
+
+        [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([dr, dc]) => {
+            const row = current.row + dr;
+            const column = current.column + dc;
+            const key = `${row},${column}`;
+
+            if (visited.has(key) || !isPlayableCell(row, column)) {
+                return;
+            }
+
+            visited.add(key);
+            cells.push({ row, column });
+            queue.push({ row, column, distance: current.distance + 1 });
+        });
     }
 
     return cells;
@@ -4912,10 +5406,7 @@ function createStatusCard(
                 ${
                     skills.length > 0
                         ? skills.map(skill => `
-                            <div
-                                class="status-skill"
-                                title="${skill.description || ""}"
-                            >
+                            <div class="status-skill">
                                 <span class="status-skill-name">
                                     ${skill.name}
                                 </span>
@@ -5140,6 +5631,454 @@ function renderPlayerPanels() {
         }
     );
 
+    /*
+     * [手番の色で盤面の枠を変える / 現在ターン表示]
+     * renderPlayerPanels()は手番交代・オンライン同期・決着など
+     * 状態が変わるたびに必ず呼ばれるので、ここにまとめて乗せる。
+     */
+    updateTurnIndicators();
+
+}
+
+
+/* ========================================
+   TURN INDICATORS
+   ・盤面の枠を手番プレイヤーの色にする
+   ・ヘッダー中央に「TURN N / 誰のターンか」を表示する
+======================================== */
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function updateTurnIndicators() {
+
+    const wrapper =
+        fieldArea?.querySelector(".battle-field-wrapper");
+
+    /*
+     * 決着後は勝者の色(引き分けならグレー)、
+     * それ以外は現在の手番プレイヤーの色。
+     */
+    const framePlayer =
+        battleState.gameOver
+            ? battleState.winner
+            : battleState.currentPlayer;
+
+    const frameHex =
+        framePlayer == null
+            ? "#777777"
+            : getPlayerColorHex(framePlayer);
+
+    if (wrapper) {
+        wrapper.style.setProperty("--turn-color", frameHex);
+        wrapper.style.setProperty(
+            "--turn-glow",
+            framePlayer == null
+                ? "rgba(119, 119, 119, 0.25)"
+                : getPlayerColorRgba(framePlayer, 0.45)
+        );
+        wrapper.classList.add("turn-framed");
+    }
+
+    // 手番プレイヤーのパネルも同じ色で軽く光らせる
+    const assignment = getVisualSlotAssignments();
+
+    [1, 2, 3, 4].forEach(slotNumber => {
+        const panel = PLAYER_PANEL_SLOTS[slotNumber]?.panel;
+
+        if (!panel) {
+            return;
+        }
+
+        const isCurrent =
+            !battleState.gameOver &&
+            assignment[slotNumber] != null &&
+            Number(assignment[slotNumber]) === Number(battleState.currentPlayer);
+
+        panel.classList.toggle("is-current-turn", isCurrent);
+
+        panel.style.boxShadow = isCurrent
+            ? `0 0 0 1px ${frameHex}, 0 0 22px ${getPlayerColorRgba(battleState.currentPlayer, 0.35)}`
+            : "";
+    });
+
+    const indicator =
+        document.getElementById("turn-indicator");
+
+    if (indicator) {
+
+        indicator.style.setProperty("--turn-color", frameHex);
+
+        if (battleState.gameOver) {
+
+            indicator.innerHTML = `
+                <span class="turn-indicator-turn">
+                    TURN <b>${battleState.turn}</b>
+                </span>
+                <span class="turn-indicator-player">
+                    ${
+                        battleState.winner == null
+                            ? "引き分け"
+                            : `${escapeHtml(getPlayerDisplayName(battleState.winner))} の勝利`
+                    }
+                </span>
+            `;
+
+        } else {
+
+            const isMine =
+                !isSpectatorMode() &&
+                !!ONLINE_ROOM_ID &&
+                Number(battleState.currentPlayer) === Number(MY_PLAYER_NUMBER);
+
+            indicator.innerHTML = `
+                <span class="turn-indicator-turn">
+                    TURN <b>${battleState.turn}</b>
+                </span>
+                <span class="turn-indicator-player">
+                    <i class="turn-indicator-dot"></i>
+                    ${escapeHtml(getPlayerDisplayName(battleState.currentPlayer))} のターン
+                    ${isMine ? `<em>YOU</em>` : ""}
+                </span>
+            `;
+        }
+    }
+
+    // 詳細オーバーレイを開いたまま状態が更新された場合は中身も最新にする
+    refreshUnitDetailOverlay();
+}
+
+
+/* ========================================
+   UNIT DETAIL OVERLAY
+   盤面のキャラ / ステータスカードにカーソルを乗せると、
+   画面全体にステータス・所持技・技の説明を表示する。
+
+   ・pointer-events:none のオーバーレイなので、
+     表示中もその下のマスやカードをそのままクリックできる。
+   ・カーソルが通過しただけで毎回ちらつかないよう、
+     少しだけ待ってから表示する(既に表示中なら即切り替え)。
+   ・クリックした瞬間は操作の邪魔にならないよう閉じ、
+     別のキャラへカーソルを移すまで再表示しない。
+   ・タッチ操作(hoverが無い)では表示しない。
+======================================== */
+
+const UNIT_DETAIL_DELAY_MS = 220;
+
+let unitDetailTimer = null;
+let unitDetailUnitId = null;
+
+function getUnitDetailOverlay() {
+
+    let overlay =
+        document.getElementById("unit-detail-overlay");
+
+    if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "unit-detail-overlay";
+        overlay.className = "unit-detail-overlay";
+        overlay.setAttribute("aria-hidden", "true");
+        document.body.appendChild(overlay);
+    }
+
+    return overlay;
+}
+
+function isUnitDetailVisible() {
+    return !!document
+        .getElementById("unit-detail-overlay")
+        ?.classList.contains("is-visible");
+}
+
+function describeSkillTargeting(skill) {
+
+    const targeting = getSkillTargeting(skill);
+
+    const rangeText = {
+        self: "自分",
+        direction: `前方${Number(targeting.range) || 0}マス（方向指定）`,
+        move_range: "移動範囲内",
+        all_map: "マップ全体"
+    }[targeting.type] || "―";
+
+    const sideText = {
+        enemy: "敵",
+        ally: "味方",
+        self: "自分",
+        dead_ally: "倒れた味方",
+        dead_enemy: "倒れた敵",
+        dead_any: "倒れたキャラ"
+    }[targeting.targetSide] || "";
+
+    let countText = "";
+
+    if (targeting.targetCount === "all") {
+        countText = "全体";
+    } else if (targeting.targetCount === "all_allies") {
+        countText = "味方全員";
+    } else if (Number(targeting.targetCount) > 1) {
+        countText = `${Number(targeting.targetCount)}体`;
+    } else if (targeting.type !== "self") {
+        countText = "単体";
+    }
+
+    return {
+        rangeText,
+        targetText:
+            targeting.type === "self"
+                ? "自分"
+                : [sideText, countText].filter(Boolean).join("・") || "―"
+    };
+}
+
+function buildUnitDetailHtml(unit) {
+
+    const colorHex = getPlayerColorHex(unit.player);
+
+    const hpRate =
+        unit.maxHp > 0
+            ? Math.max(0, Math.min(100, (unit.hp / unit.maxHp) * 100))
+            : 0;
+
+    const skills = getCharacterSkills(unit.characterId) || [];
+
+    const tags = [];
+
+    if (!unit.alive) {
+        tags.push(`<span class="unit-detail-tag is-dead">撃破</span>`);
+    } else if (battleState.movedUnits.has(unit.unitId)) {
+        tags.push(`<span class="unit-detail-tag">行動済み</span>`);
+    }
+
+    if (unit.moveBuffAmount) {
+        tags.push(`<span class="unit-detail-tag is-buff">移動 +${unit.moveBuffAmount}</span>`);
+    }
+
+    // ブラフは自分のユニットにだけ見せる（相手には区別させない）
+    if (
+        battleState.bluffUnits.has(unit.unitId) &&
+        Number(unit.player) === Number(MY_PLAYER_NUMBER)
+    ) {
+        tags.push(`<span class="unit-detail-tag is-bluff">BLUFF</span>`);
+    }
+
+    const moveText =
+        unit.moveBuffAmount
+            ? `${unit.move}<small>（+${unit.moveBuffAmount}）</small>`
+            : `${unit.move}`;
+
+    const skillsHtml =
+        skills.length > 0
+            ? skills.map(skill => {
+
+                const { rangeText, targetText } =
+                    describeSkillTargeting(skill);
+
+                const accuracy =
+                    Number.isFinite(Number(skill.accuracy))
+                        ? Number(skill.accuracy)
+                        : 100;
+
+                const isLocked =
+                    unit.lastSkillId != null &&
+                    unit.lastSkillId === skill.id;
+
+                return `
+                    <li class="unit-detail-skill${isLocked ? " is-locked" : ""}">
+                        <div class="unit-detail-skill-head">
+                            <strong>${escapeHtml(skill.name)}</strong>
+                            ${isLocked ? `<span class="unit-detail-skill-lock">連続使用不可</span>` : ""}
+                        </div>
+                        <div class="unit-detail-skill-meta">
+                            <span>${Number(skill.power) > 0 ? `威力 <b>${skill.power}</b>` : "変化技"}</span>
+                            <span>命中 <b>${accuracy}%</b></span>
+                            <span>範囲 <b>${escapeHtml(rangeText)}</b></span>
+                            <span>対象 <b>${escapeHtml(targetText)}</b></span>
+                        </div>
+                        <p class="unit-detail-skill-desc">
+                            ${escapeHtml(skill.description || "説明はまだありません。")}
+                        </p>
+                    </li>
+                `;
+            }).join("")
+            : `<li class="unit-detail-skill-empty">技なし</li>`;
+
+    return `
+        <div class="unit-detail-card" style="--unit-color:${colorHex}">
+
+            <section class="unit-detail-profile">
+
+                <div class="unit-detail-image">
+                    <img src="${escapeHtml(unit.image)}" alt="">
+                </div>
+
+                <div class="unit-detail-owner">
+                    ${escapeHtml(getPlayerDisplayName(unit.player))}
+                </div>
+
+                <h2 class="unit-detail-name">
+                    ${escapeHtml(unit.name)}
+                </h2>
+
+                <div class="unit-detail-tags">
+                    ${tags.join("")}
+                </div>
+
+                <div class="unit-detail-hp">
+                    <div class="unit-detail-hp-row">
+                        <span>HP</span>
+                        <span><b>${unit.hp}</b> / ${unit.maxHp}</span>
+                    </div>
+                    <div class="unit-detail-hp-bar">
+                        <div style="width:${hpRate}%"></div>
+                    </div>
+                </div>
+
+                <div class="unit-detail-stats">
+                    <div><span>ATK</span><b>${unit.attack}</b></div>
+                    <div><span>DEF</span><b>${unit.defense}</b></div>
+                    <div><span>MOVE</span><b>${moveText}</b></div>
+                </div>
+
+            </section>
+
+            <section class="unit-detail-skills">
+                <div class="unit-detail-section-title">SKILLS</div>
+                <ul>
+                    ${skillsHtml}
+                </ul>
+            </section>
+
+        </div>
+    `;
+}
+
+function showUnitDetailOverlay(unit) {
+
+    if (!unit) {
+        hideUnitDetailOverlay();
+        return;
+    }
+
+    const overlay = getUnitDetailOverlay();
+
+    overlay.innerHTML = buildUnitDetailHtml(unit);
+    overlay.classList.add("is-visible");
+}
+
+function hideUnitDetailOverlay() {
+
+    if (unitDetailTimer) {
+        clearTimeout(unitDetailTimer);
+        unitDetailTimer = null;
+    }
+
+    document
+        .getElementById("unit-detail-overlay")
+        ?.classList.remove("is-visible");
+}
+
+function refreshUnitDetailOverlay() {
+
+    if (!isUnitDetailVisible() || !unitDetailUnitId) {
+        return;
+    }
+
+    const unit = getUnit(unitDetailUnitId);
+
+    if (unit) {
+        getUnitDetailOverlay().innerHTML = buildUnitDetailHtml(unit);
+    } else {
+        hideUnitDetailOverlay();
+    }
+}
+
+function getHoveredUnit(target) {
+
+    if (!(target instanceof Element)) {
+        return null;
+    }
+
+    const card = target.closest(".character-status-card");
+
+    if (card) {
+        return getUnit(card.dataset.unitId) || null;
+    }
+
+    const cell = target.closest(".board-cell");
+
+    if (cell && battleField?.contains(cell)) {
+
+        const row = Number(cell.dataset.row);
+        const column = Number(cell.dataset.column);
+
+        return getUnitAt(row, column) || getDeadUnitAt(row, column) || null;
+    }
+
+    return null;
+}
+
+function setupUnitDetailHover() {
+
+    document.addEventListener("pointerover", event => {
+
+        if (event.pointerType && event.pointerType !== "mouse") {
+            return;
+        }
+
+        const unit = getHoveredUnit(event.target);
+        const unitId = unit ? unit.unitId : null;
+
+        if (unitId === unitDetailUnitId) {
+            return;
+        }
+
+        unitDetailUnitId = unitId;
+
+        if (unitDetailTimer) {
+            clearTimeout(unitDetailTimer);
+            unitDetailTimer = null;
+        }
+
+        if (!unit) {
+            hideUnitDetailOverlay();
+            return;
+        }
+
+        // すでに開いているなら待たずに切り替える
+        if (isUnitDetailVisible()) {
+            showUnitDetailOverlay(unit);
+            return;
+        }
+
+        unitDetailTimer = setTimeout(() => {
+            unitDetailTimer = null;
+            showUnitDetailOverlay(getUnit(unitId));
+        }, UNIT_DETAIL_DELAY_MS);
+    });
+
+    // クリックした瞬間は閉じる(同じキャラの上では再表示しない)
+    document.addEventListener("pointerdown", () => {
+        hideUnitDetailOverlay();
+    });
+
+    // ウィンドウ外へカーソルが出たら閉じる
+    document.documentElement.addEventListener("mouseleave", () => {
+        unitDetailUnitId = null;
+        hideUnitDetailOverlay();
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            hideUnitDetailOverlay();
+        }
+    });
 }
 
 
@@ -5213,6 +6152,8 @@ function advanceToNextPlayer() {
 
 function endTurn() {
     if (isSpectatorMode()) return;
+
+    if (battleState.mapSelecting) return;
 
 
     if (
@@ -5396,6 +6337,7 @@ function updateControlPanel() {
      */
     if (
         isSpectatorMode() ||
+        battleState.mapSelecting ||
         Number(battleState.currentPlayer) !== Number(MY_PLAYER_NUMBER)
     ) {
         panel.innerHTML = "";
@@ -5624,6 +6566,155 @@ function updateControlPanel() {
 
 
 /* ========================================
+   MAP SELECT
+   対戦開始前のマップ選択画面。
+   ・選ぶのはホスト(参加者の中で一番若いプレイヤー番号)。
+     オフライン対戦ではその画面の人がそのまま選ぶ。
+   ・他の参加者・観戦者には「選択中」の待機画面を出す。
+   ・選び終わるとマップに合わせて盤面と初期配置を作り直し、
+     オンラインでは状態ごと全員へ同期する。
+======================================== */
+
+function isMapHost() {
+    if (!ONLINE_ROOM_ID) {
+        return true;
+    }
+
+    return (
+        !isSpectatorMode() &&
+        Number(MY_PLAYER_NUMBER) === Number(battleState.activePlayers[0])
+    );
+}
+
+function buildMapPreviewHtml(map) {
+    const { size, grid } = getNormalizedMap(map);
+    const cells = [];
+
+    grid.forEach(line => {
+        line.forEach(char => {
+            const { type, image } = getLegendEntry(char);
+            let className = "map-preview-cell";
+            const styles = [];
+
+            if (type === "wall") {
+                className += " is-wall";
+            } else if (type.startsWith("castle")) {
+                className += " is-castle";
+                styles.push(`background-color:${getPlayerColorHex(Number(type.slice(6)))}`);
+            } else if (type !== "floor") {
+                className += " is-void";
+            }
+
+            if (image && type !== "void" && !type.startsWith("castle")) {
+                styles.push(`background-image:url(&quot;${encodeURI(image)}&quot;)`);
+            }
+
+            cells.push(
+                `<i class="${className}"${styles.length ? ` style="${styles.join(";")}"` : ""}></i>`
+            );
+        });
+    });
+
+    return `
+        <div class="map-preview" style="--preview-size:${size}">
+            ${cells.join("")}
+        </div>
+    `;
+}
+
+function updateMapSelectOverlay() {
+
+    let overlay = document.getElementById("map-select-overlay");
+
+    if (!battleState.mapSelecting || battleState.gameOver) {
+        overlay?.remove();
+        return;
+    }
+
+    if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "map-select-overlay";
+        overlay.className = "map-select-overlay";
+        document.body.appendChild(overlay);
+    }
+
+    const playerCount = battleState.activePlayers.length;
+
+    if (!isMapHost()) {
+        overlay.innerHTML = `
+            <div class="map-select-panel is-waiting">
+                <div class="map-select-label">FIELD SELECT</div>
+                <h2>${escapeHtml(getPlayerDisplayName(battleState.activePlayers[0]))} がマップを選んでいます…</h2>
+            </div>
+        `;
+        return;
+    }
+
+    const maps = getMapsForPlayerCount(playerCount);
+
+    overlay.innerHTML = `
+        <div class="map-select-panel">
+            <div class="map-select-label">FIELD SELECT · ${playerCount}人対戦</div>
+            <h2>戦うフィールドを選んでください</h2>
+            <div class="map-select-list">
+                ${maps.map(map => `
+                    <button
+                        type="button"
+                        class="map-select-item${map.id === battleState.mapId ? " is-current" : ""}"
+                        data-map-id="${escapeHtml(map.id)}"
+                    >
+                        ${buildMapPreviewHtml(map)}
+                        <strong>${escapeHtml(map.name)}</strong>
+                        <span>${escapeHtml(map.description || "")}</span>
+                        <small>${getNormalizedMap(map).size} × ${getNormalizedMap(map).size}</small>
+                    </button>
+                `).join("")}
+            </div>
+            <p class="map-select-note">自分の城(左下の色)から見た向きで表示しています</p>
+        </div>
+    `;
+
+    overlay.querySelectorAll(".map-select-item").forEach(button => {
+        button.addEventListener("click", () => {
+            chooseMap(button.dataset.mapId);
+        });
+    });
+}
+
+function chooseMap(mapId) {
+
+    if (!battleState.mapSelecting || !isMapHost()) {
+        return;
+    }
+
+    applyMap(mapId, battleState.activePlayers.length);
+
+    battleState.mapSelecting = false;
+
+    // 初期配置がマップに依存するので、盤面とユニットを作り直す
+    createBoard();
+    createUnits();
+
+    clearCellStates();
+    renderUnitIcons();
+    renderPlayerPanels();
+    updateControlPanel();
+    updateMapSelectOverlay();
+
+    addBattleLog(`フィールド「${getCurrentMap()?.name || "?"}」で対戦開始！`);
+
+    if (
+        ONLINE_ROOM_ID &&
+        Number(battleState.currentPlayer) === Number(MY_PLAYER_NUMBER)
+    ) {
+        showYourTurnCutIn();
+    }
+
+    onlineSendState();
+}
+
+
+/* ========================================
    INITIALIZE
 ======================================== */
 
@@ -5637,7 +6728,19 @@ function initialize() {
      * オンラインで実際に3〜4人対戦だった場合は、battle_start受信時に
      * BOARD_SIZEを再計算してcreateBoard()を呼び直す。
      */
-    BOARD_SIZE = getBoardSizeForPlayerCount(battleState.activePlayers.length);
+    const playerCount = battleState.activePlayers.length;
+    const presetMapId =
+        isMapAvailableFor(URL_MAP_ID, playerCount) ? URL_MAP_ID : null;
+
+    applyMap(presetMapId || getDefaultMapId(playerCount), playerCount);
+
+    /*
+     * [フィールド形状]
+     * オフライン対戦では開始時にマップを選ぶ(URLで指定済みなら選ばない)。
+     * オンライン対戦ではbattle_start受信時に改めて判定するので、
+     * ここでは選択画面を出さない。
+     */
+    battleState.mapSelecting = !ONLINE_ROOM_ID && !presetMapId;
 
     createBoard();
 
@@ -5646,6 +6749,9 @@ function initialize() {
     createUnits();
 
     startBattleBgm();
+
+    // キャラにカーソルを乗せたときの詳細表示(イベント委譲なので1回だけ登録)
+    setupUnitDetailHover();
 
     /*
      * 初期配置を盤面へ表示
@@ -5656,6 +6762,8 @@ function initialize() {
     renderPlayerPanels();
 
     updateControlPanel();
+
+    updateMapSelectOverlay();
 
 }
 

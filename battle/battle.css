@@ -4046,3 +4046,699 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 .direction-button::before {
     font-size: 24px;
 }
+
+/* ============================================================
+   TURN FRAME
+   盤面の枠を「現在の手番プレイヤーの色」にする。
+   --turn-color / --turn-glow は battle.js の
+   updateTurnIndicators() が手番交代のたびに書き込む。
+============================================================ */
+
+.battle-field-wrapper.turn-framed {
+    border: 3px solid var(--turn-color, #777777);
+
+    box-shadow:
+        0 0 0 1px #111111,
+        0 0 26px var(--turn-glow, transparent),
+        0 20px 50px rgba(0, 0, 0, 0.65);
+
+    transition:
+        border-color 0.35s ease,
+        box-shadow 0.35s ease;
+}
+
+.player-status.is-current-turn,
+.player-status-3.is-current-turn,
+.player-status-4.is-current-turn {
+    transition: box-shadow 0.35s ease;
+}
+
+
+/* ============================================================
+   TURN INDICATOR (ヘッダー右側)
+============================================================ */
+
+/*
+ * 盤面の上に絶対配置されたバトルログがヘッダーの高さまで
+ * はみ出しているため、ヘッダー自体をログより手前のレイヤーにする。
+ * (ヘッダーは背景が透明なので、ログの見え方はほぼ変わらない)
+ */
+.battle-header {
+    position: relative;
+    z-index: 30;
+}
+
+/*
+ * スマホ表示では.field-areaのtransformが外れてスタッキングコンテキストが
+ * 無くなり、ログのz-index:99999がヘッダーより手前に来てしまう。
+ * isolationで盤面エリア内に閉じ込める(盤面内での重なり順は変わらない)。
+ */
+.field-area {
+    isolation: isolate;
+}
+
+.turn-indicator {
+    /*
+     * 盤面の真上にはバトルログ(.battle-log)がヘッダーまで
+     * はみ出して重なるため、中央ではなくヘッダー右側
+     * (盤面の横幅の外)に置く。
+     */
+    margin-left: auto;
+    margin-right: 20px;
+
+    display: flex;
+    align-items: center;
+    gap: 14px;
+
+    padding: 6px 16px;
+
+    border: 1px solid var(--turn-color, #555555);
+    background:
+        linear-gradient(
+            90deg,
+            #0b0b0b,
+            color-mix(in srgb, var(--turn-color, #555555) 24%, #0b0b0b)
+        );
+
+    /* バトルログ(z-index:99999, 盤面のスタッキング内)より手前に出す */
+    position: relative;
+    z-index: 30;
+
+    white-space: nowrap;
+    pointer-events: none;
+
+    transition: border-color 0.35s ease;
+}
+
+.turn-indicator:empty {
+    display: none;
+}
+
+.turn-indicator-turn {
+    color: #999999;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+}
+
+.turn-indicator-turn b {
+    color: #ffffff;
+    font-size: 20px;
+    letter-spacing: 0.04em;
+    margin-left: 4px;
+}
+
+.turn-indicator-player {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+
+    color: var(--turn-color, #ffffff);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.turn-indicator-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--turn-color, #ffffff);
+    box-shadow: 0 0 8px var(--turn-color, #ffffff);
+    animation: turn-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.turn-indicator-player em {
+    padding: 1px 6px;
+    background: var(--turn-color, #ffffff);
+    color: #050505;
+    font-style: normal;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+}
+
+@keyframes turn-dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+@media (max-width: 1250px) {
+    .turn-indicator {
+        margin-right: 0;
+    }
+
+    .battle-title {
+        display: none;
+    }
+}
+
+@media (max-width: 850px) {
+    .turn-indicator {
+        gap: 8px;
+        padding: 4px 10px;
+    }
+
+    .turn-indicator-turn b {
+        font-size: 16px;
+    }
+
+    .turn-indicator-player {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 500px) {
+    .battle-game-title {
+        display: none;
+    }
+}
+
+
+/* ============================================================
+   UNIT DETAIL OVERLAY
+   キャラにカーソルを乗せたときの全画面ステータス表示。
+   pointer-events:none なので、表示中も下の盤面を操作できる。
+============================================================ */
+
+.unit-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 24px;
+
+    background: rgba(0, 0, 0, 0.74);
+    backdrop-filter: blur(3px);
+
+    pointer-events: none;
+
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 0.14s ease,
+        visibility 0s linear 0.14s;
+}
+
+.unit-detail-overlay.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 0.14s ease,
+        visibility 0s;
+}
+
+.unit-detail-card {
+    width: min(960px, 100%);
+    max-height: calc(100dvh - 48px);
+
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+
+    background: #0e0e0e;
+    border: 1px solid #333333;
+    border-top: 4px solid var(--unit-color);
+
+    box-shadow:
+        0 0 40px color-mix(in srgb, var(--unit-color) 30%, transparent),
+        0 30px 80px rgba(0, 0, 0, 0.7);
+
+    overflow: hidden;
+
+    transform: translateY(6px);
+    transition: transform 0.14s ease;
+}
+
+.unit-detail-overlay.is-visible .unit-detail-card {
+    transform: none;
+}
+
+.unit-detail-profile {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    padding: 24px;
+
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--unit-color) 16%, transparent),
+            transparent 60%
+        );
+
+    border-right: 1px solid #262626;
+}
+
+.unit-detail-image {
+    width: 100%;
+    aspect-ratio: 1;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: #070707;
+    border: 1px solid color-mix(in srgb, var(--unit-color) 55%, #222222);
+}
+
+.unit-detail-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.unit-detail-owner {
+    color: var(--unit-color);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+}
+
+.unit-detail-name {
+    margin: -6px 0 0;
+    font-size: 24px;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+}
+
+.unit-detail-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.unit-detail-tags:empty {
+    display: none;
+}
+
+.unit-detail-tag {
+    padding: 2px 8px;
+    border: 1px solid #555555;
+    color: #cccccc;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.unit-detail-tag.is-dead {
+    border-color: #777777;
+    color: #888888;
+}
+
+.unit-detail-tag.is-buff {
+    border-color: #3b82f6;
+    color: #8fb9ff;
+}
+
+.unit-detail-tag.is-bluff {
+    border-color: #91804b;
+    color: #e7c86a;
+}
+
+.unit-detail-hp-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    color: #999999;
+    font-size: 12px;
+}
+
+.unit-detail-hp-row b {
+    color: #ffffff;
+    font-size: 18px;
+}
+
+.unit-detail-hp-bar {
+    height: 8px;
+    background: #262626;
+    overflow: hidden;
+}
+
+.unit-detail-hp-bar div {
+    height: 100%;
+    background: var(--unit-color);
+}
+
+.unit-detail-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.unit-detail-stats div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    background: #161616;
+    border: 1px solid #292929;
+}
+
+.unit-detail-stats span {
+    color: #888888;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+}
+
+.unit-detail-stats b {
+    font-size: 20px;
+}
+
+.unit-detail-stats small {
+    color: #8fb9ff;
+    font-size: 10px;
+    font-weight: 400;
+}
+
+.unit-detail-skills {
+    min-height: 0;
+    padding: 24px;
+    overflow: hidden;
+}
+
+.unit-detail-section-title {
+    margin-bottom: 12px;
+    color: #888888;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+}
+
+.unit-detail-skills ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.unit-detail-skill {
+    padding: 12px 14px;
+    background: #151515;
+    border: 1px solid #2a2a2a;
+    border-left: 3px solid var(--unit-color);
+}
+
+.unit-detail-skill.is-locked {
+    opacity: 0.6;
+}
+
+.unit-detail-skill-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.unit-detail-skill-head strong {
+    font-size: 16px;
+}
+
+.unit-detail-skill-lock {
+    padding: 1px 6px;
+    border: 1px solid #b85252;
+    color: #ff8a8a;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.unit-detail-skill-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-bottom: 6px;
+    color: #888888;
+    font-size: 11px;
+}
+
+.unit-detail-skill-meta b {
+    color: #e5e5e5;
+}
+
+.unit-detail-skill-desc {
+    margin: 0;
+    color: #bbbbbb;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.unit-detail-skill-empty {
+    color: #777777;
+    font-size: 13px;
+}
+
+@media (max-width: 850px), (max-height: 620px) {
+    .unit-detail-card {
+        grid-template-columns: 200px minmax(0, 1fr);
+    }
+
+    .unit-detail-profile,
+    .unit-detail-skills {
+        padding: 16px;
+    }
+
+    .unit-detail-name {
+        font-size: 18px;
+    }
+
+    .unit-detail-skill {
+        padding: 8px 10px;
+    }
+
+    .unit-detail-skill-desc {
+        font-size: 12px;
+    }
+}
+
+
+/* ============================================================
+   FIELD TERRAIN (フィールド形状)
+   battle.js の createBoard() がマップに応じて付けるクラス。
+============================================================ */
+
+/* 存在しないマス: 盤面の外と同じ見た目にして「無い」ように見せる */
+.board-cell.terrain-void,
+.board-cell.terrain-void.alt-cell {
+    background: #070707 !important;
+    border-color: transparent;
+    box-shadow: none !important;
+    cursor: default;
+}
+
+.board-cell.terrain-void::after {
+    display: none;
+}
+
+/* 壁: 盛り上がった石ブロック風 */
+.board-cell.terrain-wall,
+.board-cell.terrain-wall.alt-cell {
+    background:
+        linear-gradient(
+            145deg,
+            #4a4a4a,
+            #2c2c2c
+        );
+    background-size: cover;
+    background-position: center;
+
+    box-shadow:
+        inset 2px 2px 0 rgba(255, 255, 255, 0.10),
+        inset -2px -2px 0 rgba(0, 0, 0, 0.55);
+
+    cursor: default;
+}
+
+.board-cell.terrain-wall::after {
+    display: none;
+}
+
+/* 文字ごとに画像を割り当てたマス */
+.board-cell.has-tile-image {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* 画像を敷いた通常マスでも、移動可能・選択中が分かるように上から色を重ねる */
+.board-cell.has-tile-image.movable {
+    box-shadow:
+        inset 0 0 0 999px rgba(255, 255, 255, 0.14),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.board-cell.has-tile-image.selected {
+    box-shadow:
+        inset 0 0 0 999px rgba(255, 255, 255, 0.10),
+        inset 0 0 0 2px #ffffff;
+}
+
+
+/* ============================================================
+   MAP SELECT (対戦開始前のフィールド選択)
+============================================================ */
+
+.map-select-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 24px;
+
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(3px);
+}
+
+.map-select-panel {
+    width: min(1080px, 100%);
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+
+    padding: 28px;
+
+    background: #0e0e0e;
+    border: 1px solid #333333;
+    border-top: 4px solid #ffffff;
+
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+}
+
+.map-select-panel.is-waiting {
+    width: min(560px, 100%);
+    text-align: center;
+}
+
+.map-select-label {
+    color: #888888;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+}
+
+.map-select-panel h2 {
+    margin: 6px 0 20px;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+}
+
+.map-select-panel.is-waiting h2 {
+    margin-bottom: 0;
+}
+
+.map-select-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.map-select-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    padding: 12px;
+
+    background: #151515;
+    border: 1px solid #2d2d2d;
+    color: #ffffff;
+
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        transform 0.1s ease;
+}
+
+.map-select-item:hover {
+    background: #1d1d1d;
+    border-color: #888888;
+}
+
+.map-select-item:active {
+    transform: translateY(1px);
+}
+
+.map-select-item strong {
+    margin-top: 4px;
+    font-size: 15px;
+}
+
+.map-select-item span {
+    color: #aaaaaa;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.map-select-item small {
+    color: #666666;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+}
+
+.map-preview {
+    width: 100%;
+    aspect-ratio: 1;
+
+    display: grid;
+    grid-template-columns: repeat(var(--preview-size), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--preview-size), minmax(0, 1fr));
+    gap: 1px;
+
+    padding: 6px;
+    background: #070707;
+}
+
+.map-preview-cell {
+    display: block;
+    background-color: #2a2a2a;
+    background-size: cover;
+    background-position: center;
+}
+
+.map-preview-cell.is-wall {
+    background-color: #6b6b6b;
+}
+
+.map-preview-cell.is-void {
+    background: transparent;
+}
+
+.map-preview-cell.is-castle {
+    border-radius: 1px;
+    box-shadow: 0 0 6px currentColor;
+}
+
+.map-select-note {
+    margin: 16px 0 0;
+    color: #666666;
+    font-size: 11px;
+}
+
+@media (max-width: 600px) {
+    .map-select-panel {
+        padding: 18px;
+    }
+
+    .map-select-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .map-select-item span {
+        display: none;
+    }
+}
