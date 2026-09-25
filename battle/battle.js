@@ -2804,18 +2804,59 @@ function renderUnitIcons() {
 
             /*
              * 死亡ユニットのグレーアウト表示。
-             * filterはborder/box-shadowを含めた
-             * アイコン全体に一括で適用されるため、
-             * 枠線ごと自然にモノクロ化される。
+             *
+             * [死体でも枠のプレイヤーカラーを残す]
+             * 以前はimg自体にfilter(grayscale)をかけていたため、
+             * 枠線(border)まで一緒にモノクロになり、誰の死体か
+             * 分からなくなっていた。
+             * 死亡ユニットだけ「枠を持つ外側のdiv」と「中のimg」に分け、
+             * グレーアウトは中の画像にだけかける。
+             * 外側のdivにboard-unit-iconクラスを付けるので、
+             * 次回描画時の削除処理(.board-unit-iconを全削除)もそのまま効く。
              */
 
             if (!unit.alive) {
 
-                icon.style.filter =
-                    "grayscale(1) brightness(0.55)";
+                const frame =
+                    document.createElement("div");
 
-                icon.style.opacity =
-                    "0.55";
+                frame.className =
+                    "board-unit-icon dead";
+
+                // 位置・大きさ・枠線・重なり順は外側のdivへ移す
+                [
+                    "position", "left", "top", "width", "height",
+                    "transform", "boxSizing", "border", "borderRadius",
+                    "zIndex", "pointerEvents", "userSelect"
+                ].forEach(property => {
+                    frame.style[property] = icon.style[property];
+                });
+
+                // 枠は少し控えめにしつつ、色はプレイヤーカラーのまま残す
+                frame.style.border =
+                    `2px solid ${getPlayerColorRgba(unit.player, 0.65)}`;
+
+                frame.style.overflow = "hidden";
+
+                icon.className = "";
+                icon.removeAttribute("style");
+
+                Object.assign(icon.style, {
+                    display: "block",
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    pointerEvents: "none",
+                    userSelect: "none",
+                    filter: "grayscale(1) brightness(0.55)",
+                    opacity: "0.55"
+                });
+
+                frame.appendChild(icon);
+
+                cell.appendChild(frame);
+
+                return;
 
             }
 
