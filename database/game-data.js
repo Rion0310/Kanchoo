@@ -78,7 +78,7 @@ const skillDatabase = [
             type: "self",
             targetCount: "single",
             targetSide: "self"
-        }
+        }//
     },
     {
         id: 7,
