@@ -1028,3 +1028,341 @@ body {
     }
 
 }
+
+/* ========================================
+   フィールド(マップ)選択
+   中身は room.js が描画する
+======================================== */
+
+.field-section {
+    position: relative;
+
+    z-index: 2;
+
+    width: min(900px, 100%);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    margin-top: 4px;
+}
+
+.field-section > .section-label {
+    margin-bottom: 10px;
+}
+
+.room-map-select {
+    width: 100%;
+
+    padding: clamp(12px, 1.6vw, 18px);
+
+    border: 1px solid #333;
+
+    background: rgba(18, 18, 18, 0.9);
+}
+
+.room-map-select-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+
+    gap: 4px 12px;
+
+    margin-bottom: 12px;
+}
+
+.room-map-select-current {
+    font-size: clamp(16px, 2.2vw, 22px);
+
+    font-weight: 900;
+
+    letter-spacing: 0.1em;
+}
+
+.room-map-select-sub {
+    font-size: clamp(8px, 1vw, 10px);
+
+    letter-spacing: 0.12em;
+
+    color: #666;
+}
+
+/* マップは横一列に並べ、増えたら左右にスクロールして見る */
+.room-map-list {
+    display: flex;
+
+    gap: 10px;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    padding-bottom: 8px;
+
+    scroll-snap-type: x proximity;
+    scroll-padding: 0 4px;
+
+    scrollbar-width: thin;
+    scrollbar-color: #444 #111;
+}
+
+.room-map-list::-webkit-scrollbar {
+    height: 6px;
+}
+
+.room-map-list::-webkit-scrollbar-track {
+    background: #111;
+}
+
+.room-map-list::-webkit-scrollbar-thumb {
+    background: #444;
+}
+
+.room-map-item {
+    flex: 0 0 150px;
+
+    scroll-snap-align: start;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 5px;
+
+    padding: 8px;
+
+    border: 1px solid #292929;
+
+    background: rgba(8, 8, 8, 0.6);
+
+    color: #ffffff;
+
+    font-family: inherit;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.room-map-item:hover:not(:disabled) {
+    background: rgba(40, 40, 40, 0.85);
+
+    border-color: #555;
+}
+
+.room-map-item:disabled {
+    cursor: default;
+}
+
+.room-map-item.is-current {
+    border-color: #ffffff;
+
+    background: #252525;
+
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+        0 0 20px rgba(255, 255, 255, 0.06);
+}
+
+.room-map-item strong {
+    font-size: 13px;
+
+    font-weight: 900;
+
+    letter-spacing: 0.08em;
+}
+
+.room-map-item span {
+    font-size: 10px;
+
+    line-height: 1.5;
+
+    color: #888;
+}
+
+.room-map-item .map-preview {
+    width: 100%;
+
+    aspect-ratio: 1;
+
+    display: grid;
+
+    grid-template-columns: repeat(var(--preview-size), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--preview-size), minmax(0, 1fr));
+
+    gap: 1px;
+
+    padding: 4px;
+
+    background: #050505;
+}
+
+.room-map-item .map-preview-cell {
+    display: block;
+
+    background-color: #262626;
+    background-size: cover;
+    background-position: center;
+}
+
+.room-map-item .map-preview-cell.is-wall {
+    background-color: #6b6b6b;
+}
+
+.room-map-item .map-preview-cell.is-void {
+    background: transparent;
+}
+
+.room-map-note {
+    margin: 8px 0 0;
+
+    font-size: clamp(8px, 1vw, 10px);
+
+    letter-spacing: 0.08em;
+
+    color: #555;
+
+    text-align: center;
+}
+
+
+/* ========================================
+   対戦卓の強制解放 / リセット
+======================================== */
+
+/* 席の右上の「解放」ボタン(対戦卓自体が<button>なのでspanで作っている) */
+.room-seat-release {
+    position: absolute;
+
+    top: 4px;
+    right: 4px;
+
+    z-index: 2;
+
+    padding: 2px 6px;
+
+    border: 1px solid #7a3434;
+
+    background: rgba(40, 16, 16, 0.92);
+
+    color: #ff9a9a;
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.1em;
+
+    cursor: pointer;
+}
+
+.room-seat-release:hover,
+.room-seat-release:focus-visible {
+    background: #5a1f1f;
+
+    color: #ffffff;
+
+    outline: none;
+}
+
+/* 席の持ち主の接続が切れているとき */
+.room-seat-offline {
+    position: absolute;
+
+    top: 4px;
+    left: 6px;
+
+    z-index: 2;
+
+    padding: 1px 5px;
+
+    background: #3a2a10;
+
+    color: #e7c86a;
+
+    font-size: 8px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.1em;
+}
+
+.room-table-tools {
+    width: 100%;
+
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+
+    gap: 8px 12px;
+
+    margin: 0 0 12px;
+
+    font-size: clamp(8px, 1vw, 10px);
+
+    letter-spacing: 0.08em;
+
+    color: #555;
+}
+
+/* 対戦中(または対戦中のまま固まっている)ときは目立たせる */
+.room-table-tools.is-stuck {
+    justify-content: space-between;
+
+    padding: 8px 12px;
+
+    border: 1px solid #5c5230;
+
+    background: rgba(29, 27, 22, 0.9);
+
+    color: #e7c86a;
+}
+
+.room-force-reset {
+    padding: 6px 12px;
+
+    border: 1px solid #5a2a2a;
+
+    background: rgba(29, 22, 22, 0.9);
+
+    color: #ff9a9a;
+
+    font-family: inherit;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.1em;
+
+    cursor: pointer;
+
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.room-force-reset:hover {
+    background: #2b1d1d;
+
+    border-color: #b85252;
+
+    color: #ffffff;
+}
+
+@media (max-width: 700px) {
+
+    .room-map-item {
+        flex-basis: 128px;
+    }
+
+    .room-map-item span {
+        display: none;
+    }
+
+}

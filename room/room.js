@@ -149,12 +149,9 @@
     /* ========================================
        MAP SELECT / TABLE TOOLS (ROOM画面に差し込むUI)
 
-       room.html を書き換えなくても動くよう、必要な要素と
-       スタイルはこのファイルから差し込む。
-       表示位置を変えたい場合は room.html の好きな場所に
-         <div id="room-map-select"></div>
-         <div id="room-table-tools"></div>
-       を置けば、そこに描画される(無ければ対戦卓の直後に自動で作る)。
+       描画先は room.html の #room-map-select / #room-table-tools。
+       (万一無ければ対戦卓の直後に自動で作る)
+       見た目は room.css の「FIELD SELECT / TABLE TOOLS」。
     ======================================== */
 
     /*
@@ -187,188 +184,6 @@
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#39;");
-    }
-
-    function injectRoomToolStyles() {
-        if (document.getElementById("room-tool-styles")) {
-            return;
-        }
-
-        const style = document.createElement("style");
-        style.id = "room-tool-styles";
-        style.textContent = `
-            .room-map-select {
-                margin: 16px 0;
-                padding: 14px;
-                background: #101010;
-                border: 1px solid #333333;
-                color: #ffffff;
-            }
-            .room-map-select-head {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: baseline;
-                gap: 6px 12px;
-                margin-bottom: 10px;
-            }
-            .room-map-select-label {
-                color: #888888;
-                font-size: 11px;
-                font-weight: 700;
-                letter-spacing: 0.2em;
-            }
-            .room-map-select-current {
-                font-size: 16px;
-                font-weight: 700;
-            }
-            .room-map-select-sub {
-                color: #888888;
-                font-size: 11px;
-            }
-            /* マップは横一列に並べ、増えたら左右にスクロールして見る */
-            .room-map-list {
-                display: flex;
-                gap: 8px;
-                overflow-x: auto;
-                overflow-y: hidden;
-                padding-bottom: 8px;
-                scroll-snap-type: x proximity;
-                scroll-padding: 0 4px;
-                scrollbar-width: thin;
-                scrollbar-color: #555555 #151515;
-            }
-            .room-map-list::-webkit-scrollbar {
-                height: 6px;
-            }
-            .room-map-list::-webkit-scrollbar-track {
-                background: #151515;
-            }
-            .room-map-list::-webkit-scrollbar-thumb {
-                background: #555555;
-            }
-            .room-map-item {
-                flex: 0 0 150px;
-                scroll-snap-align: start;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-                padding: 8px;
-                background: #171717;
-                border: 1px solid #2d2d2d;
-                color: #ffffff;
-                font-family: inherit;
-                text-align: left;
-                cursor: pointer;
-            }
-            .room-map-item:hover:not(:disabled) {
-                border-color: #888888;
-                background: #1e1e1e;
-            }
-            .room-map-item:disabled {
-                cursor: default;
-            }
-            .room-map-item.is-current {
-                border-color: #ffffff;
-                box-shadow: inset 0 0 0 1px #ffffff;
-            }
-            .room-map-item strong {
-                font-size: 13px;
-            }
-            .room-map-item span {
-                color: #999999;
-                font-size: 10px;
-                line-height: 1.5;
-            }
-            .room-map-item .map-preview {
-                width: 100%;
-                aspect-ratio: 1;
-                display: grid;
-                grid-template-columns: repeat(var(--preview-size), minmax(0, 1fr));
-                grid-template-rows: repeat(var(--preview-size), minmax(0, 1fr));
-                gap: 1px;
-                padding: 4px;
-                background: #070707;
-            }
-            .room-map-item .map-preview-cell {
-                display: block;
-                background-color: #2a2a2a;
-                background-size: cover;
-                background-position: center;
-            }
-            .room-map-item .map-preview-cell.is-wall {
-                background-color: #6b6b6b;
-            }
-            .room-map-item .map-preview-cell.is-void {
-                background: transparent;
-            }
-            .room-map-note {
-                margin: 8px 0 0;
-                color: #777777;
-                font-size: 10px;
-            }
-
-            .room-seat-release {
-                position: absolute;
-                top: 4px;
-                right: 4px;
-                z-index: 2;
-                padding: 2px 6px;
-                border: 1px solid #b85252;
-                background: rgba(40, 16, 16, 0.92);
-                color: #ff9a9a;
-                font-family: inherit;
-                font-size: 10px;
-                font-weight: 700;
-                cursor: pointer;
-            }
-            .room-seat-release:hover {
-                background: #5a1f1f;
-                color: #ffffff;
-            }
-            .room-seat-offline {
-                position: absolute;
-                left: 4px;
-                top: 4px;
-                z-index: 2;
-                padding: 1px 5px;
-                background: #3a2a10;
-                color: #e7c86a;
-                font-size: 9px;
-                font-weight: 700;
-            }
-
-            .room-table-tools {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                gap: 8px 12px;
-                margin: 8px 0 16px;
-                color: #999999;
-                font-size: 11px;
-            }
-            .room-table-tools.is-stuck {
-                padding: 8px 10px;
-                border: 1px solid #91804b;
-                background: #1d1b16;
-                color: #e7c86a;
-            }
-            .room-force-reset {
-                padding: 6px 12px;
-                border: 1px solid #6b2f2f;
-                background: #1d1616;
-                color: #ff9a9a;
-                font-family: inherit;
-                font-size: 11px;
-                font-weight: 700;
-                cursor: pointer;
-            }
-            .room-force-reset:hover {
-                background: #2b1d1d;
-                border-color: #b85252;
-                color: #ffffff;
-            }
-        `;
-        document.head.appendChild(style);
     }
 
     function ensureToolContainer(id, className) {
@@ -430,7 +245,6 @@
 
         container.innerHTML = `
             <div class="room-map-select-head">
-                <span class="room-map-select-label">FIELD</span>
                 <span class="room-map-select-current">
                     ${escapeHtml(currentMap?.name || "―")}
                 </span>
@@ -536,15 +350,22 @@
                 return;
             }
 
-            const button = document.createElement("button");
-            button.type = "button";
+            /*
+             * 対戦卓(#battle-table)自体が<button>なので、中にさらに<button>を
+             * 入れるとブラウザによっては押せない(ボタンの入れ子は不正)。
+             * そのため<span role="button">で作る。
+             */
+            const button = document.createElement("span");
             button.className = "room-seat-release";
+            button.setAttribute("role", "button");
+            button.tabIndex = 0;
             button.textContent = "解放";
             button.title = "この席を強制的に空けます";
 
-            button.addEventListener("click", event => {
+            const release = event => {
                 // 枠全体のクリック(=その卓に座る)を発火させない
                 event.stopPropagation();
+                event.preventDefault();
 
                 const ok = window.confirm(
                     `対戦卓${player}（${info.name}）を強制的に空けますか？`
@@ -552,6 +373,13 @@
 
                 if (ok) {
                     send({ type: "room_force_release", player });
+                }
+            };
+
+            button.addEventListener("click", release);
+            button.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    release(event);
                 }
             });
 
@@ -972,7 +800,6 @@
         window.location.href = "../title/title.html";
     });
 
-    injectRoomToolStyles();
     ensureMapsApiLoaded();
     renderRoom();
     connect();

@@ -680,6 +680,17 @@ function connectOnlineBattle() {
                 }
             }
 
+            // [FX] 相手が使った技のエフェクトを再生(自分が送ったものは再生済みなので無視)
+            if (message.event === "skill_fx") {
+                const fx = message.data;
+
+                if (fx?.fxId && sentFxIds.has(fx.fxId)) {
+                    sentFxIds.delete(fx.fxId);
+                } else if (fx && Array.isArray(fx.events)) {
+                    playSkillFxLocally(fx);
+                }
+            }
+
             if (message.event === "battle_log") {
                 const logData = message.data;
                 const logMessage =
@@ -992,10 +1003,21 @@ function showYourTurnCutIn() {
     }, 760);
 }
 
+/*
+ * [FX] 技のエフェクト(命中→ネガポジ→撃破!!)を先に見せてからカットインを出すため、
+ * 少し遅らせて表示する。
+ */
+const KILL_CUT_IN_DELAY_MS = 450;
+
 function showKillCutIn(attacker) {
     if (!attacker) {
         return;
     }
+
+    setTimeout(() => renderKillCutIn(attacker), KILL_CUT_IN_DELAY_MS);
+}
+
+function renderKillCutIn(attacker) {
 
     const existing =
         document.getElementById("kill-cut-in");
@@ -1543,6 +1565,12 @@ function knockbackFromCenterCastle(attacker, target) {
     }
 
     if (destination) {
+        recordFx({
+            type: "knockback",
+            from: { row: target.row, column: target.column },
+            to: { row: destination.row, column: destination.column }
+        });
+
         target.row = destination.row;
         target.column = destination.column;
         addBattleLog(`${target.name}は中央の城から押し出された！`);
@@ -3924,6 +3952,78 @@ function selectBluffType(unit, type) {
 
 
 /* ========================================
+   SKILL FX (技のエフェクト)
+
+   技を実行している間に「何が起きたか」(ダメージ・回復・ミス・ブラフ・
+   ノックバック等)をここに記録し、実行後に battle-fx.js へ渡して演出する。
+   オンラインでは同じ記録をbattle_eventで送り、相手画面でも同じ演出を再生する。
+   (ゲームの状態は通常どおりbattle_stateで同期されるので、演出は見た目だけ)
+======================================== */
+
+let skillFxCollector = null;
+const sentFxIds = new Set();
+let fxCounter = 0;
+
+function recordFx(event) {
+    if (skillFxCollector && event) {
+        skillFxCollector.events.push(event);
+    }
+}
+
+function getFxContext() {
+    return {
+        wrapper: fieldArea?.querySelector(".battle-field-wrapper") || null,
+        getCell,
+        colorOf: player => (player == null ? null : getPlayerColorHex(player))
+    };
+}
+
+function playSkillFxLocally(fx) {
+    if (!window.MonsterWarFX || !fx) {
+        return;
+    }
+
+    // 盤面の再描画(同じ処理の中で直後に行われる)が終わってから再生する
+    requestAnimationFrame(() => {
+        window.MonsterWarFX.playSkill(fx, getFxContext());
+    });
+}
+
+function startSkillFx(unit, skill, targetCells) {
+    skillFxCollector = {
+        fxId: `${ONLINE_SESSION_ID}-fx-${Date.now()}-${++fxCounter}`,
+        attackerPlayer: unit.player,
+        attacker: { row: unit.row, column: unit.column },
+        skillId: skill.id,
+        effect: skill.effect || "",
+        fxStyle: skill.fx || "",
+        power: Number(skill.power) || 0,
+        targeting: getSkillTargeting(skill).type,
+        targetCells: (targetCells || []).map(({ row, column }) => ({ row, column })),
+        events: []
+    };
+}
+
+function finishSkillFx() {
+    const fx = skillFxCollector;
+    skillFxCollector = null;
+
+    if (!fx) {
+        return;
+    }
+
+    playSkillFxLocally(fx);
+
+    if (ONLINE_ROOM_ID) {
+        sentFxIds.add(fx.fxId);
+
+        // battle_state(盤面の最終状態)を送った後で届くよう、処理の最後に回す
+        setTimeout(() => onlineSendBattleEvent("skill_fx", fx), 0);
+    }
+}
+
+
+/* ========================================
    SKILL SYSTEM
 ======================================== */
 
@@ -4724,6 +4824,8 @@ function applyDamage(
             finalDamage = 0;
             bluffAbsorbed = true;
 
+            recordFx({ type: "nullify", row: target.row, column: target.column });
+
             addBattleLog(
                 `${target.name}はケツカッチンを発動！ダメージを無効化した！`
             );
@@ -4738,6 +4840,8 @@ function applyDamage(
             addBattleLog(
                 `${target.name}はケツイキした！${target.name}は${finalDamage}回復！`
             );
+
+            recordFx({ type: "heal", row: target.row, column: target.column, amount: finalDamage });
 
             finalDamage = 0;
             bluffAbsorbed = true;
@@ -4762,6 +4866,14 @@ function applyDamage(
                 attacker.alive = false;
                 addBattleLog(`${attacker.name}は倒れた！`);
             }
+
+            recordFx({
+                type: "reflect",
+                row: attacker.row,
+                column: attacker.column,
+                amount: finalDamage,
+                killed: !attacker.alive
+            });
 
             finalDamage = 0;
             bluffAbsorbed = true;
@@ -4881,6 +4993,18 @@ function applyDamage(
         }
     }
 
+    // [FX] 通常の命中(ブラフで防がれていない)
+    if (!bluffAbsorbed) {
+        recordFx({
+            type: "damage",
+            row: target.row,
+            column: target.column,
+            amount: finalDamage,
+            maxHp: target.maxHp,
+            killed: !target.alive
+        });
+    }
+
     if (guardActive) {
         target.guardNextTurn = false;
     }
@@ -4929,10 +5053,14 @@ function healTargets(targets, amount) {
     targets
         .filter(target => target.alive)
         .forEach(target => {
+            const before = target.hp;
+
             target.hp = Math.min(
                 target.maxHp,
                 target.hp + amount
             );
+
+            recordFx({ type: "heal", row: target.row, column: target.column, amount: target.hp - before });
         });
 }
 
@@ -4946,6 +5074,8 @@ function reviveTarget(target, hp) {
         target.maxHp,
         Math.max(1, hp)
     );
+
+    recordFx({ type: "revive", row: target.row, column: target.column });
 }
 
 function removeTarget(target) {
@@ -5147,6 +5277,9 @@ const SKILL_EFFECTS = {
             .forEach(target => {
                 target.move += 2;
                 target.moveBuffAmount = (target.moveBuffAmount || 0) + 2;
+
+                // [FX] 強化された味方全員にエフェクトを出す
+                recordFx({ type: "buff", row: target.row, column: target.column });
             });
     },
 
@@ -5276,6 +5409,13 @@ function applySkillEffect(
 
     if (Math.random() * 100 >= accuracy) {
         addBattleLog(`${unit.name}の${skill.name}は外れた！`);
+
+        // [FX] 外れた対象(いなければ使用者)にMISSを出す
+        const missTargets = [...targets, ...deadTargets];
+        (missTargets.length ? missTargets : [unit]).forEach(target => {
+            recordFx({ type: "miss", row: target.row, column: target.column });
+        });
+
         return;
     }
 
@@ -5326,6 +5466,8 @@ function executeSkill(
             ? (unit.nextPowerMultiplier || 1)
             : 1;
 
+    startSkillFx(unit, skill, targetCells);
+
     applySkillEffect(
         unit,
         skill,
@@ -5333,6 +5475,8 @@ function executeSkill(
         deadTargets,
         multiplier
     );
+
+    finishSkillFx();
 
     // 技を実際に発動したら、その技を「前回使用した技」として記録
     unit.lastSkillId = Number(skill.id);
@@ -6788,6 +6932,9 @@ function initialize() {
 
     // キャラにカーソルを乗せたときの詳細表示(イベント委譲なので1回だけ登録)
     setupUnitDetailHover();
+
+    // [FX] ヘッダーに演出の強さの切り替えボタン(派手/控えめ/OFF)
+    window.MonsterWarFX?.mountToggle(document.querySelector(".battle-header"));
 
     /*
      * 初期配置を盤面へ表示

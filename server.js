@@ -42,15 +42,60 @@ function createRoom(roomId) {
         mapId: null,
         mapChangedBy: "",
         // 実際に始まった対戦のマップID。再接続時のbattle_startでも同じ値を送る。
-        battleMapId: null
+        battleMapId: null,
+        // 空になったROOMを削除するまでのタイマー
+        deleteTimer: null
     };
+}
+
+/*
+ * [BUGFIX / ROOM→BATTLEの画面遷移中にROOMが消える件]
+ * 以前は接続数が0になった瞬間にROOMを削除していた。
+ * ROOM→BATTLEの遷移では全員のWebSocketが一旦切れてから繋ぎ直すため、
+ * 2人対戦だと「全員の切断が先に届く」瞬間があり、そこでROOMごと
+ * (着席情報・対戦開始状態・選んだマップも)消えていた。
+ * その後BATTLE画面から繋ぎ直すと新しい空のROOMが作られ、
+ * 本人確認(sessionId)が一致せず観戦者扱いになる・卓の状態がおかしくなる、
+ * といった不具合の原因になっていた。
+ * 空になってもすぐには消さず、しばらく待ってから削除する。
+ * 待っている間に誰かが入ってきたら削除を取り消す。
+ */
+const EMPTY_ROOM_DELETE_DELAY_MS = 60000;
+
+function cancelRoomDeletion(room) {
+    if (room && room.deleteTimer) {
+        clearTimeout(room.deleteTimer);
+        room.deleteTimer = null;
+    }
+}
+
+function scheduleRoomDeletion(room) {
+    if (!room || room.deleteTimer) return;
+
+    room.deleteTimer = setTimeout(() => {
+        room.deleteTimer = null;
+
+        if (room.sockets.size === 0) {
+            if (room.battleResetTimer) {
+                clearTimeout(room.battleResetTimer);
+                room.battleResetTimer = null;
+            }
+
+            rooms.delete(room.roomId);
+            console.log(`[ROOM] room=${room.roomId} を削除しました(接続なし)`);
+        }
+    }, EMPTY_ROOM_DELETE_DELAY_MS);
 }
 
 function getOrCreateRoom(roomId) {
     const id = String(roomId || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CONSTANTS.ROOM_ID_MAX_LENGTH);
     if (!id) return null;
     if (!rooms.has(id)) rooms.set(id, createRoom(id));
-    return rooms.get(id);
+
+    const room = rooms.get(id);
+    cancelRoomDeletion(room);
+
+    return room;
 }
 
 
@@ -1057,12 +1102,13 @@ wss.on("connection", socket => {
         }
 
         if (room.sockets.size === 0) {
-            // 接続が完全になくなったROOMは破棄します。
-            if (room.battleResetTimer) {
-                clearTimeout(room.battleResetTimer);
-                room.battleResetTimer = null;
+            // 接続が完全になくなったROOMは、しばらく待ってから破棄します。
+            // (ROOM→BATTLEの遷移中に一瞬0人になるため、即削除しない)
+            scheduleRoomDeletion(room);
+
+            if (room.battleStarted) {
+                scheduleBattleRoomReset(room);
             }
-            rooms.delete(room.roomId);
         } else {
             const hasActiveBattleSocket =
                 [...room.sockets].some(

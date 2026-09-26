@@ -287,6 +287,35 @@
 
         </button>
 
+
+        <!--
+            [卓の強制リセット]
+            行儀の悪い切断などで卓が固まったとき用。中身はroom.jsが描画する。
+        -->
+        <div
+            id="room-table-tools"
+            class="room-table-tools"
+        ></div>
+
+    </section>
+
+
+    <!-- ========================================
+         フィールド(マップ)選択
+         中身はroom.jsが shared/battle-maps.js の一覧から描画する。
+    ========================================= -->
+
+    <section class="field-section">
+
+        <div class="section-label">
+            SELECT FIELD
+        </div>
+
+        <div
+            id="room-map-select"
+            class="room-map-select"
+        ></div>
+
     </section>
 
 
@@ -367,6 +396,7 @@
     ========================================= -->
 
     <script src="../shared/constants.js"></script>
+    <script src="../shared/battle-maps.js"></script>
     <script src="../shared/menu-bgm.js"></script>
     <script src="room.js"></script>
 
