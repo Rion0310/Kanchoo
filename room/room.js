@@ -225,12 +225,30 @@
                 color: #888888;
                 font-size: 11px;
             }
+            /* マップは横一列に並べ、増えたら左右にスクロールして見る */
             .room-map-list {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                display: flex;
                 gap: 8px;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding-bottom: 8px;
+                scroll-snap-type: x proximity;
+                scroll-padding: 0 4px;
+                scrollbar-width: thin;
+                scrollbar-color: #555555 #151515;
+            }
+            .room-map-list::-webkit-scrollbar {
+                height: 6px;
+            }
+            .room-map-list::-webkit-scrollbar-track {
+                background: #151515;
+            }
+            .room-map-list::-webkit-scrollbar-thumb {
+                background: #555555;
             }
             .room-map-item {
+                flex: 0 0 150px;
+                scroll-snap-align: start;
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
@@ -406,6 +424,10 @@
             roomState.selectedMapId &&
             roomState.selectedMapId !== currentMapId;
 
+        // 再描画(room_stateのたびに起きる)で横スクロール位置が戻らないよう保存しておく
+        const previousScrollLeft =
+            container.querySelector(".room-map-list")?.scrollLeft ?? null;
+
         container.innerHTML = `
             <div class="room-map-select-head">
                 <span class="room-map-select-label">FIELD</span>
@@ -442,6 +464,29 @@
                 }
             </p>
         `;
+
+        const list = container.querySelector(".room-map-list");
+
+        if (list) {
+            if (previousScrollLeft !== null) {
+                list.scrollLeft = previousScrollLeft;
+            } else {
+                // 初回表示では選択中のマップが見える位置までスクロールする
+                list.querySelector(".room-map-item.is-current")
+                    ?.scrollIntoView({ block: "nearest", inline: "center" });
+            }
+
+            // マウスホイール(縦回転)でも左右にスクロールできるようにする
+            list.addEventListener("wheel", event => {
+                if (
+                    Math.abs(event.deltaY) > Math.abs(event.deltaX) &&
+                    list.scrollWidth > list.clientWidth
+                ) {
+                    list.scrollLeft += event.deltaY;
+                    event.preventDefault();
+                }
+            }, { passive: false });
+        }
 
         container.querySelectorAll(".room-map-item").forEach(button => {
             button.addEventListener("click", () => {
