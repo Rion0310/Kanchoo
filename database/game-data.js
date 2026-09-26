@@ -204,7 +204,7 @@ const skillDatabase = [
         id: 16,
         name: "斬チョー",
         type: "物理",
-        power: 70,
+        power: 100,
         effect: "damage",
         // [FX] 当たった相手のアイコンが真っ二つに割れてずれる演出(battle-fx.js の cleave)
         fx: "cleave",

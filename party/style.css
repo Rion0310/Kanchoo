@@ -946,6 +946,90 @@ button:disabled {
 
 
 /* ========================================
+   ランダム編成
+======================================== */
+
+/* フッターの左端に寄せる(右側はリセット・出撃決定) */
+.random-party {
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    margin-right: auto;
+}
+
+.random-party label {
+    font-size: 11px;
+
+    font-weight: bold;
+
+    letter-spacing: 0.08em;
+
+    color: #888;
+}
+
+#random-count {
+    height: 36px;
+
+    padding: 0 8px;
+
+    border: 1px solid #444;
+
+    background: #1a1a1a;
+
+    color: #fff;
+
+    font-family: inherit;
+
+    font-size: 12px;
+
+    font-weight: bold;
+
+    cursor: pointer;
+}
+
+#random-count:focus {
+    outline: 1px solid #888;
+}
+
+#random-button {
+    min-width: 120px;
+
+    border: 1px solid #555;
+}
+
+/* 編成し直した直後にパーティ欄を一瞬光らせる */
+.party-list.just-randomized .party-slot:not(.empty) {
+    animation: party-randomized 0.5s ease-out;
+}
+
+.party-list.just-randomized .party-slot:nth-child(2) { animation-delay: 0.04s; }
+.party-list.just-randomized .party-slot:nth-child(3) { animation-delay: 0.08s; }
+.party-list.just-randomized .party-slot:nth-child(4) { animation-delay: 0.12s; }
+.party-list.just-randomized .party-slot:nth-child(5) { animation-delay: 0.16s; }
+.party-list.just-randomized .party-slot:nth-child(6) { animation-delay: 0.20s; }
+
+@keyframes party-randomized {
+    0%   { box-shadow: inset 0 0 0 2px #ffffff, 0 0 18px rgba(255, 255, 255, 0.35); }
+    100% { box-shadow: inset 0 0 0 0 transparent, 0 0 0 transparent; }
+}
+
+@media (max-width: 700px) {
+
+    .random-party label {
+        display: none;
+    }
+
+    #random-button {
+        min-width: 0;
+    }
+
+}
+
+
+/* ========================================
    タブレット
 ======================================== */
 

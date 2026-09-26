@@ -265,6 +265,29 @@
 
         <footer class="screen-footer">
 
+            <!--
+                [ランダム編成]
+                指定した人数のパーティをランダムに自動編成する。
+                人数の選択肢はscript.jsが PARTY_MAX_SIZE に合わせて作る。
+            -->
+            <div class="random-party">
+
+                <label for="random-count">
+                    人数
+                </label>
+
+                <select id="random-count"></select>
+
+                <button
+                    type="button"
+                    id="random-button"
+                >
+                    ランダム編成
+                </button>
+
+            </div>
+
+
             <button id="clear-button">
                 パーティをリセット
             </button>

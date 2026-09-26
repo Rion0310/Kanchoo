@@ -3633,6 +3633,11 @@ function undoMove() {
         return;
     }
 
+    // [ブラフ] ブラフを仕込んだ後は移動位置がロックされるので、やり直せない
+    if (unit.bluffType) {
+        return;
+    }
+
     if (
         battleState.actionOriginRow === null ||
         battleState.actionOriginColumn === null
@@ -3905,7 +3910,15 @@ function selectBluffType(unit, type) {
 
     playerBluffUses[type] = uses - 1;
 
-    logFinalizedMovementIfAny(unit);
+    /*
+     * [BUGFIX / ブラフを使うと移動ログでバレる件]
+     * 以前はここで移動のログを出していたため、「移動した」という
+     * ログだけが(技や待機のログより先に)ぽつんと相手の画面に流れ、
+     * ブラフを仕込んだことが丸分かりだった。
+     * 移動のログは、この後に技か待機で行動を確定したとき
+     * (executeSkill / waitUnit の logFinalizedMovementIfAny)に
+     * 通常の行動と全く同じタイミングで1回だけ出す。
+     */
 
     unit.bluffType = type;
 
@@ -3938,32 +3951,27 @@ function selectBluffType(unit, type) {
 
     /*
      * [ブラフと攻撃の両立]
-     * 以前はここでfinishUnitAction()を呼び、ブラフを選んだ時点で
-     * このユニットの行動を「待機」と同じように確定させ、
-     * ターンを終えていた（＝ブラフと攻撃を同じターンに両立できなかった）。
-     *
-     * 今回、ブラフを仕込んだ後もそのまま攻撃(技を発動)へ進めるように、
+     * ブラフを仕込んだ後もそのまま攻撃(技を発動)へ進めるよう、
      * finishUnitAction()は呼ばずbattleState.actionPhaseを維持したまま
-     * 行動選択パネルへ戻す。何も攻撃しなければ、この後「待機」を選んで
-     * 通常どおり行動を終えられる。
+     * 行動選択パネルへ戻す。何も攻撃しなければ「待機」で行動を終える。
      *
-     * ただし移動位置はブラフを確定した時点でロックする
-     * （actionOriginRow/Columnをクリアし、「移動をやり直す」を
-     * 選べなくする＝updateControlPanel側でボタンごと非表示にする）。
-     * これをしないと、この後executeSkill()が呼ばれた際に
-     * logFinalizedMovementIfAny()が同じ移動ログをもう一度
-     * 記録してしまう。
+     * ブラフを確定した時点で移動位置はロックする(「移動をやり直す」は
+     * updateControlPanel側で非表示、undoMove側でも拒否)。
+     * 移動元(actionOriginRow/Column)は、行動確定時に移動ログを
+     * 1回だけ出すために残しておく(finishUnitAction()でクリアされる)。
+     *
+     * [BUGFIX / ブラフを使うと移動ログでバレる件]
+     * 以前はここでonlineSendState()を呼んでおり、行動の途中の状態
+     * (移動だけして行動していないコマ)が相手に届いていた。
+     * 他の行動と同じく、行動を確定したときにだけ同期する。
      */
-    battleState.actionOriginRow = null;
-    battleState.actionOriginColumn = null;
-
     clearCellStates();
 
     renderUnitIcons();
-    renderPlayerPanels();
-    updateControlPanel();
 
-    onlineSendState();
+    renderPlayerPanels();
+
+    updateControlPanel();
 }
 
 

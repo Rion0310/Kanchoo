@@ -222,6 +222,16 @@ const confirmButton =
         "confirm-button"
     );
 
+const randomCountSelect =
+    document.getElementById(
+        "random-count"
+    );
+
+const randomButton =
+    document.getElementById(
+        "random-button"
+    );
+
 
 // ========================================
 // キャラクター取得
@@ -928,6 +938,137 @@ function clearParty() {
 
 
 // ========================================
+// ランダム編成
+// ========================================
+//
+// 指定した人数(1〜PARTY_MAX_SIZE)のパーティを、
+// キャラクターボックス全体から重複なしでランダムに選んで作り直す。
+// 今のパーティは置き換える。保存(localStorage)は他の操作と同じく
+// 「出撃決定」を押したときに行う。
+// 前回選んだ人数はこの端末に覚えておき、次回も同じ人数から始める。
+
+const RANDOM_COUNT_STORAGE_KEY = "monsterWarRandomPartyCount";
+
+function getRandomPartyMaxCount() {
+
+    return Math.min(
+        window.MONSTER_WAR_CONSTANTS.PARTY_MAX_SIZE,
+        characterDatabase.length
+    );
+
+}
+
+function setupRandomCountSelect() {
+
+    if (!randomCountSelect) {
+        return;
+    }
+
+    const max =
+        getRandomPartyMaxCount();
+
+    let saved = max;
+
+    try {
+        const value = Number(localStorage.getItem(RANDOM_COUNT_STORAGE_KEY));
+
+        if (Number.isInteger(value) && value >= 1 && value <= max) {
+            saved = value;
+        }
+    }
+    catch (error) {
+        // 保存できない環境では最大人数のまま
+    }
+
+    randomCountSelect.innerHTML = "";
+
+    for (let count = 1; count <= max; count++) {
+
+        const option =
+            document.createElement("option");
+
+        option.value = String(count);
+        option.textContent = `${count}体`;
+
+        if (count === saved) {
+            option.selected = true;
+        }
+
+        randomCountSelect.appendChild(option);
+
+    }
+
+    randomCountSelect.addEventListener(
+        "change",
+        () => {
+            try {
+                localStorage.setItem(RANDOM_COUNT_STORAGE_KEY, randomCountSelect.value);
+            }
+            catch (error) {
+                // 無視
+            }
+        }
+    );
+
+}
+
+// Fisher-Yatesシャッフルで偏りなく並べ替える
+function shuffle(list) {
+
+    const result = [...list];
+
+    for (let i = result.length - 1; i > 0; i--) {
+
+        const j = Math.floor(Math.random() * (i + 1));
+
+        [result[i], result[j]] = [result[j], result[i]];
+
+    }
+
+    return result;
+
+}
+
+function randomizeParty() {
+
+    const max =
+        getRandomPartyMaxCount();
+
+    const count =
+        Math.max(
+            1,
+            Math.min(
+                max,
+                Number(randomCountSelect?.value) || max
+            )
+        );
+
+    party =
+        shuffle(
+            characterDatabase.map(character => character.id)
+        ).slice(0, count);
+
+    // 編成した先頭のキャラクターの詳細を表示する
+    selectedCharacterId =
+        party[0] ?? null;
+
+    renderParty();
+
+    renderCharacterBox();
+
+    renderCharacterDetail();
+
+    updateButtons();
+
+    // 入れ替わったことが分かるよう、パーティ欄を一瞬光らせる
+    partyList.classList.remove("just-randomized");
+    void partyList.offsetWidth;
+    partyList.classList.add("just-randomized");
+
+}
+
+
+// ========================================
 // 出撃決定
 // ========================================
 
@@ -1046,12 +1187,24 @@ if (confirmButton) {
 
 }
 
+if (randomButton) {
+
+    randomButton.addEventListener(
+        "click",
+        randomizeParty
+    );
+
+}
+
 
 // ========================================
 // 初期化
 // ========================================
 
 function initialize() {
+
+    // [ランダム編成] 人数の選択肢を作る
+    setupRandomCountSelect();
 
     // ========================================
     // 保存されているパーティを復元
