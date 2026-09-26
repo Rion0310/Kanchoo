@@ -34,6 +34,9 @@
  *   "wall"    壁（移動も技も通さない）
  *   "void"    存在しないマス（表示されず、移動も技も通さない）
  *   "castle1"〜"castle4"  そのプレイヤーの城（通常のマスとして扱う）
+ *   "center"  中央の城（誰の物でもない。複数マス並べると、その範囲全体で1つの城になる。
+ *             範囲内を自分のコマだけで一定ターン守ると勝ち。
+ *             攻撃を受けると範囲の外へ押し出される。通常のマスとして扱う）
  *
  * 同じ「通常のマス」でも文字ごとに別の画像を割り当てられる
  * (例: a=草原, d=石畳, e=砂地 … すべて type:"floor")。
@@ -48,7 +51,8 @@ const MAP_LEGEND = {
     "1": "castle1",
     "2": "castle2",
     "3": "castle3",
-    "4": "castle4"
+    "4": "castle4",
+    "C": "center"
 
     // 画像付きの例（画像ファイルを用意したらコメントを外す）:
     // , "a": { type: "floor", image: "../images/tiles/grass.png" }
@@ -286,6 +290,56 @@ const BATTLE_MAPS = {
             "#####......#####",
             "1####......####4"
         ]
+    },
+
+    /*
+     * 中央の城(C)があるマップ。Cを並べた範囲(ここでは2×2)がまるごと中央の城になる。
+     * centerHoldTurns … 中央の城に何ターン居座れば勝ちか(省略すると5)
+     */
+    throne_2: {
+        name: "王座の間",
+        description: "中央の城に5ターン居座れば勝ち。攻撃されると押し出される。",
+        players: [2],
+        centerHoldTurns: 5,
+        rows: [
+            "XXXXX######2",
+            "XXXX########",
+            "XXX#########",
+            "XX##X##X####",
+            "X##X####X###",
+            "#####CC#####",
+            "#####CC#####",
+            "###X####X##X",
+            "####X##X##XX",
+            "#########XXX",
+            "########XXXX",
+            "1######XXXXX"
+        ]
+    },
+
+    throne_4: {
+        name: "王座の間",
+        description: "中央の城に5ターン居座れば勝ち。攻撃されると押し出される。",
+        players: [3, 4],
+        centerHoldTurns: 5,
+        rows: [
+            "3##############2",
+            "################",
+            "#######XX#######",
+            "################",
+            "######X##X######",
+            "#####X####X#####",
+            "####X######X####",
+            "##X####CC####X##",
+            "##X####CC####X##",
+            "####X######X####",
+            "#####X####X#####",
+            "######X##X######",
+            "################",
+            "#######XX#######",
+            "################",
+            "1##############4"
+        ]
     }
 };
 
@@ -332,6 +386,9 @@ function buildMapPreviewHtml(map, playerColors = {}) {
 
             if (type === "wall") {
                 className += " is-wall";
+            } else if (type === "center") {
+                className += " is-center";
+                styles.push("background-color:#e7c86a");
             } else if (type.startsWith("castle")) {
                 className += " is-castle";
                 styles.push(`background-color:${playerColors[Number(type.slice(6))] || "#e7c86a"}`);
