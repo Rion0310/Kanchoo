@@ -279,7 +279,7 @@ const characterDatabase = [
         move: 4,
         description: "りおんが我が道往くためにデスカンチョーに堕ちた姿。",
         type: "attacker",
-        skills: [1, 2, 4, 5],
+        skills: [1, 2, 4, 16],
         song: "../audio/death.mp3"
     },
     {
@@ -300,12 +300,12 @@ const characterDatabase = [
         name: "桃子",
         image: "../images/momoko.png",
         hp: 130,
-        attack: 150,
+        attack: 170,
         defense: 100,
         move: 4,
         description: "弱っちい。なぜなら女だから。",
         type: "healer",
-        skills: [1, 3, 7, 10],
+        skills: [1, 3, 7, 16],
         song: "../audio/momoko.mp3"
     },
     {
