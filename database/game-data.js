@@ -78,7 +78,7 @@ const skillDatabase = [
             type: "self",
             targetCount: "single",
             targetSide: "self"
-        }//
+        }
     },
     {
         id: 7,
@@ -124,7 +124,7 @@ const skillDatabase = [
         id: 10,
         name: "スクリューカンチョー",
         type: "物理",
-        power: 60,
+        power: 80,
         effect: "damage_ignore_defense",
         description: "必ず定数のダメージを与える。",
         targeting: {
@@ -204,7 +204,7 @@ const skillDatabase = [
         id: 16,
         name: "斬チョー",
         type: "物理",
-        power: 100,
+        power: 70,
         effect: "damage",
         // [FX] 当たった相手のアイコンが真っ二つに割れてずれる演出(battle-fx.js の cleave)
         fx: "cleave",
@@ -218,9 +218,27 @@ const skillDatabase = [
         description: "一閃で相手を真っ二つにし、斬り抜けて3マス先に着地する。3マス先が空いていないと使えない。",
         targeting: {
             type: "direction",
-            range: 3,
+            range: 2,
             targetCount: "all",
             targetSide: "enemy"
+        }
+    },
+    {
+        id: 17,
+        name: "ネクロカンチョー",
+        type: "変化技",
+        power: 0,
+        /*
+         * 移動範囲内の敵の死体を、このターンだけ自分の傀儡として蘇らせて操る。
+         * 城は落とせず、中央の城の占拠にも数えず、ブラフも使えない。
+         * ターン終了時に元居た場所で死体に戻る。
+         */
+        effect: "necro_puppet",
+        description: "敵の死体をこのターンだけ傀儡として蘇らせて操る。城は落とせず、ターン終了で元の場所の死体に戻る。",
+        targeting: {
+            type: "move_range",
+            targetCount: "single",
+            targetSide: "dead_enemy"
         }
     },
 
@@ -261,7 +279,7 @@ const characterDatabase = [
         move: 4,
         description: "りおんが我が道往くためにデスカンチョーに堕ちた姿。",
         type: "attacker",
-        skills: [1, 2, 4, 16],
+        skills: [1, 2, 4, 5],
         song: "../audio/death.mp3"
     },
     {
@@ -287,7 +305,7 @@ const characterDatabase = [
         move: 4,
         description: "弱っちい。なぜなら女だから。",
         type: "healer",
-        skills: [1, 3, 7, 16],
+        skills: [1, 3, 7, 10],
         song: "../audio/momoko.mp3"
     },
     {
@@ -338,7 +356,7 @@ const characterDatabase = [
         move: 4,
         description: "どんなに足の速い生物でも影から逃れられないように、彼からは誰も...。",
         type: "attacker",
-        skills: [1, 5, 6, 13]
+        skills: [1, 5, 6, 14]
     },
     {
         id: 8,
@@ -450,9 +468,57 @@ const characterDatabase = [
         defense: 80,
         move: 5,
         description: "採用されたぞおおおおおおお正社員んんんんんんんん動物看護士の資格生かせるうううううううううううう",
-        type: "healer",
+        type: "attacker",
         skills: [1, 2, 9, 15],
         song: "../audio/yuuna2.mp3"
+    },
+    {
+        id: 17,
+        name: "なぎさ",
+        image: "../images/nagisa.png",
+        hp: 150,
+        attack: 200,
+        defense: 80,
+        move: 3,
+        description: "最近は火山頭のストーカーに悩まされているヒロイン",
+        type: "healer",
+        skills: [1, 3, 5, 7]
+    },
+    {
+        id: 18,
+        name: "Nigger",
+        image: "../images/nigger.png",
+        hp: 150,
+        attack: 300,
+        defense: 100,
+        move: 3,
+        description: "しおんの覚醒した姿、文明破壊兵器",
+        type: "attacker",
+        skills: [1, 5, 14, 17]
+    },
+    {
+        id: 19,
+        name: "トイレットペーパー工場のおじさん",
+        image: "../images/toiko.png",
+        hp: 160,
+        attack: 170,
+        defense: 80,
+        move: 4,
+        description: "この世の全てのケツ穴を掌握している",
+        type: "healer",
+        skills: [1, 2, 3, 17]
+    },
+    {
+        id: 20,
+        name: "捏造師",
+        image: "../images/netsuzoushi.png",
+        hp: 150,
+        attack: 170,
+        defense: 100,
+        move: 6,
+        description: "淫夢厨コウモリ女",
+        type: "healer",
+        skills: [1, 15, 16, 17]
     }
 ];
 

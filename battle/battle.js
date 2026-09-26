@@ -1369,7 +1369,8 @@ function getCenterHoldTurns() {
 function getCenterCastleOccupants() {
     return getCenterCastleCells()
         .map(cell => getUnitAt(cell.row, cell.column))
-        .filter(Boolean);
+        // [ネクロカンチョー] 傀儡は中央の城の占拠に数えない
+        .filter(unit => unit && !unit.puppet);
 }
 
 /*
@@ -2428,6 +2429,11 @@ function checkCastleVictory(unit) {
         return false;
     }
 
+    // [ネクロカンチョー] 傀儡は城を落とせない
+    if (unit.puppet) {
+        return false;
+    }
+
     const castleOwner =
         getCastleAt(
             unit.row,
@@ -2910,6 +2916,15 @@ function renderUnitIcons() {
 
             icon.style.border =
                 `2px solid ${getPlayerColorRgba(unit.player, 0.8)}`;
+
+            // [ネクロカンチョー] 傀儡は紫のオーラと少し青白い見た目にする
+            if (unit.alive && unit.puppet) {
+                icon.classList.add("puppet");
+                icon.style.boxShadow =
+                    "0 0 10px 2px rgba(170, 90, 255, 0.85), inset 0 0 8px rgba(170, 90, 255, 0.6)";
+                icon.style.filter =
+                    "saturate(0.55) hue-rotate(-20deg) brightness(1.05)";
+            }
 
 
             icon.style.borderRadius =
@@ -3612,7 +3627,8 @@ function undoMove() {
 
     if (
         !unit ||
-        unit.player !== battleState.currentPlayer
+        unit.player !== battleState.currentPlayer ||
+        unit.puppet // [ネクロカンチョー] 傀儡はブラフを使えない
     ) {
         return;
     }
@@ -5441,6 +5457,52 @@ const SKILL_EFFECTS = {
     },
 
     /*
+     * [ネクロカンチョー] 敵の死体を、このターンだけ自分の傀儡として蘇らせる。
+     * ・蘇った傀儡は自分のコマとして移動・技が使える(このターンまだ未行動扱い)
+     * ・城を落とせない / 中央の城の占拠に数えない / ブラフは使えない
+     * ・ターン終了時に元居た場所へ戻り、死体に戻る(releasePuppets)
+     * 死体の上に生きたコマが乗っている場合は蘇らせられない。
+     */
+    necro_puppet: (unit, skill, { deadTargets }) => {
+        const target = deadTargets.find(
+            candidate =>
+                !candidate.alive &&
+                !candidate.puppet &&
+                Number(candidate.player) !== Number(unit.player)
+        );
+
+        if (!target) {
+            return;
+        }
+
+        if (getUnitAt(target.row, target.column)) {
+            addBattleLog(`${target.name}の死体の上にコマがいるため、蘇らせられなかった`);
+            return;
+        }
+
+        target.puppet = {
+            controller: Number(unit.player),
+            originalPlayer: Number(target.player),
+            row: target.row,
+            column: target.column,
+            lastSkillId: target.lastSkillId ?? null
+        };
+
+        target.player = Number(unit.player);
+        target.alive = true;
+        target.hp = target.maxHp;
+        target.bluffType = null;
+        target.guardNextTurn = false;
+        target.lastSkillId = null;
+        battleState.bluffUnits.delete(target.unitId);
+        battleState.movedUnits.delete(target.unitId);
+
+        recordFx({ type: "necro", row: target.row, column: target.column });
+
+        addBattleLog(`${unit.name}が${target.name}を傀儡として蘇らせた！（このターンだけ操れる）`);
+    },
+
+    /*
      * 死亡ユニットをマップ上から完全に削除する（旧: id 4）。
      *
      * removeTarget() は battleState.units 配列から
@@ -5769,6 +5831,11 @@ function createStatusCard(
 
     }
 
+    // [ネクロカンチョー] 傀儡中
+    if (unit.puppet) {
+        card.classList.add("puppet");
+    }
+
 
     if (
         battleState.movedUnits.has(
@@ -5838,7 +5905,7 @@ function createStatusCard(
             <div class="status-character-info">
 
                 <div class="status-character-name">
-                    ${unit.name}
+                    ${unit.puppet ? `<span class="status-puppet-badge">傀儡</span>` : ""}${unit.name}
                 </div>
 
 
@@ -6119,7 +6186,8 @@ function renderPlayerPanels() {
             battleState.units
                 .filter(
                     unit =>
-                        Number(unit.player) === Number(player)
+                        // [ネクロカンチョー] 傀儡は元の持ち主のパネルに表示したままにする
+                        Number(unit.puppet ? unit.puppet.originalPlayer : unit.player) === Number(player)
                 )
                 .forEach(
                     unit => {
@@ -6382,6 +6450,10 @@ function buildUnitDetailHtml(unit) {
         tags.push(`<span class="unit-detail-tag is-buff">移動 +${unit.moveBuffAmount}</span>`);
     }
 
+    if (unit.puppet) {
+        tags.push(`<span class="unit-detail-tag is-puppet">傀儡（${escapeHtml(getPlayerDisplayName(unit.puppet.controller))}が操作中・ターン終了で死体に戻る）</span>`);
+    }
+
     // ブラフは自分のユニットにだけ見せる（相手には区別させない）
     if (
         battleState.bluffUnits.has(unit.unitId) &&
@@ -6615,6 +6687,44 @@ function setupUnitDetailHover() {
  * turnを1つ進める。以前の「PLAYER2→PLAYER1でturn++」も、
  * 2人対戦の場合はこの「先頭に戻ったら」と完全に一致する。
  */
+/*
+ * [ネクロカンチョー] 傀儡を解いて元居た場所の死体に戻す。
+ * 操っていたプレイヤーのターン終了時(endTurn)に呼ぶ。
+ */
+function releasePuppets(controller) {
+    battleState.units
+        .filter(unit => unit.puppet && Number(unit.puppet.controller) === Number(controller))
+        .forEach(unit => {
+            const puppet = unit.puppet;
+
+            if (unit.moveBuffAmount) {
+                unit.move -= unit.moveBuffAmount;
+                unit.moveBuffAmount = 0;
+            }
+
+            unit.player = puppet.originalPlayer;
+            unit.row = puppet.row;
+            unit.column = puppet.column;
+            unit.alive = false;
+            unit.hp = 0;
+            unit.bluffType = null;
+            unit.guardNextTurn = false;
+            unit.nextPowerMultiplier = 1;
+            unit.nextPowerTurn = null;
+            unit.lastSkillId = puppet.lastSkillId;
+            delete unit.puppet;
+
+            battleState.bluffUnits.delete(unit.unitId);
+            battleState.movedUnits.delete(unit.unitId);
+
+            addBattleLog(`${unit.name}の傀儡が解け、元の場所で死体に戻った`);
+        });
+}
+
+function isPuppet(unit) {
+    return !!unit?.puppet;
+}
+
 function advanceToNextPlayer() {
 
     const active = getActivePlayers();
@@ -6744,6 +6854,12 @@ function endTurn() {
         });
 
     battleState.movedUnits.clear();
+
+    // [ネクロカンチョー] このターンの傀儡を元の死体に戻す
+    releasePuppets(currentPlayerNumberForSkip);
+
+    // 傀儡が中央の城から消えた分も含めて占拠状態を更新
+    updateCenterHold();
 
 
     clearCellStates();
@@ -6949,12 +7065,18 @@ function updateControlPanel() {
                     actionUnit.bluffType
                         ? ""
                         : `
+                            ${
+                                // [ネクロカンチョー] 傀儡はブラフを使えない
+                                actionUnit.puppet
+                                    ? ""
+                                    : `
                             <button
                                 type="button"
                                 id="bluff-action-button"
                             >
                                 ブラフ
-                            </button>
+                            </button>`
+                            }
 
 
                             <button

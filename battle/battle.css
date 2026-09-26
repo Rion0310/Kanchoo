@@ -5158,3 +5158,68 @@ body.multiplayer-3plus .player-status-2.slot-solo {
     40%  { clip-path: inset(0 0 0 0); opacity: 0.9; }
     100% { clip-path: inset(0 0 0 0); opacity: 0; transform: translate(0, -50%) rotate(var(--rot)) scaleY(0.2); }
 }
+
+
+/* ============================================================
+   NECRO (ネクロカンチョー / 傀儡)
+============================================================ */
+
+/* 傀儡のステータスカード */
+.character-status-card.puppet {
+    border-color: rgba(170, 90, 255, 0.7);
+    box-shadow: inset 0 0 0 1px rgba(170, 90, 255, 0.5), 0 0 10px rgba(170, 90, 255, 0.25);
+}
+
+.status-puppet-badge {
+    display: inline-block;
+    margin-right: 4px;
+    padding: 0 4px;
+    background: #6a2fb3;
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 900;
+    vertical-align: 1px;
+}
+
+.unit-detail-tag.is-puppet {
+    border-color: #9d4dff;
+    color: #d8b0ff;
+}
+
+/* 死体から立ち昇る紫の霊気 */
+.fx-necro {
+    width: calc(var(--cell) * 1);
+    height: calc(var(--cell) * 3.2);
+    transform: translate(-50%, -80%);
+    background:
+        linear-gradient(0deg, rgba(157, 77, 255, 0.95), rgba(90, 30, 170, 0.5) 55%, transparent);
+    -webkit-mask-image: radial-gradient(ellipse 50% 60% at 50% 70%, #000000 40%, transparent 75%);
+    mask-image: radial-gradient(ellipse 50% 60% at 50% 70%, #000000 40%, transparent 75%);
+    filter: blur(1px);
+    mix-blend-mode: screen;
+    animation: fx-necro 1s ease-out forwards;
+}
+
+@keyframes fx-necro {
+    0%   { transform: translate(-50%, -60%) scaleY(0.2); opacity: 0; }
+    30%  { transform: translate(-50%, -80%) scaleY(1); opacity: 1; }
+    100% { transform: translate(-50%, -95%) scaleY(1.2) scaleX(0.6); opacity: 0; }
+}
+
+/* 足元の魔法陣っぽい渦 */
+.fx-necro-swirl {
+    width: calc(var(--cell) * 1.6);
+    height: calc(var(--cell) * 1.6);
+    border-radius: 50%;
+    background:
+        repeating-conic-gradient(from 0deg, rgba(157, 77, 255, 0.9) 0deg 12deg, transparent 12deg 30deg);
+    -webkit-mask-image: radial-gradient(circle, transparent 35%, #000000 40%, #000000 62%, transparent 66%);
+    mask-image: radial-gradient(circle, transparent 35%, #000000 40%, #000000 62%, transparent 66%);
+    animation: fx-necro-swirl 1.1s ease-out forwards;
+}
+
+@keyframes fx-necro-swirl {
+    0%   { transform: translate(-50%, -50%) rotate(0deg) scale(0.3); opacity: 0; }
+    25%  { opacity: 1; }
+    100% { transform: translate(-50%, -50%) rotate(200deg) scale(1.1); opacity: 0; }
+}

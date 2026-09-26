@@ -112,6 +112,7 @@ const EFFECT_STYLES = {
     kamikaze_damage: "explosion",
     revive: "holy",
     remove_dead: "dark",
+    necro_puppet: "necro",
     heal_single_ally: "heal",
     double_power_next_turn: "charge",
     move_buff_all_allies: "speed",
@@ -123,7 +124,7 @@ const EFFECT_STYLES = {
  *   fx: "explosion"
  * のように書けば、EFFECT_STYLES より優先される。
  * 選べる型: strike / pierce / explosion / curse / cleave(真っ二つ) /
- *           holy / heal / dark / charge / speed / guard
+ *           holy / heal / dark / necro(死霊術) / charge / speed / guard
  */
 function pickStyle(fx) {
     if (fx.fxStyle) return fx.fxStyle;
@@ -708,13 +709,24 @@ async function playSkill(fx, ctx) {
             .map(e => cellBox(ctx, e.row, e.column))
             .filter(Boolean);
 
-        playSound(style === "holy" || style === "heal" ? style : style === "guard" ? "guard" : style === "dark" ? "dark" : "buff");
+        playSound(
+            style === "holy" || style === "heal"
+                ? style
+                : style === "guard"
+                    ? "guard"
+                    : style === "dark" || style === "necro"
+                        ? "dark"
+                        : "buff"
+        );
+
+        if (style === "necro") shake(1);
 
         boxes.forEach((box, index) => {
             const cls = {
                 holy: "fx-pillar",
                 heal: "fx-heal",
                 dark: "fx-implode",
+                necro: "fx-necro",
                 guard: "fx-shield",
                 speed: "fx-speed",
                 charge: "fx-aura"
@@ -770,6 +782,10 @@ async function playSkill(fx, ctx) {
             case "heal":
                 popNumber(layer, box, `+${event.amount}`, "is-heal", delay);
                 spawn(layer, "fx-heal", box, {}, 1000);
+                break;
+            case "necro":
+                // 死体から紫の霊気が立ち昇る(型"necro"側でも出るので、ここでは渦だけ)
+                spawn(layer, "fx-necro-swirl", box, {}, 1100);
                 break;
             case "revive":
                 // 「REVIVE!!」は技の型(holy)側で出すので、ここでは光の柱だけ
