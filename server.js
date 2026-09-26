@@ -4,6 +4,8 @@ const path = require("path");
 const crypto = require("crypto");
 const WebSocket = require("ws");
 const CONSTANTS = require("./shared/constants.js");
+// [フィールド形状] マップ定義(ROOM・BATTLEと共通)。マップIDの検証に使う。
+const MAPS = require("./shared/battle-maps.js");
 
 const PORT = Number(process.env.PORT || 8080);
 const ROOT = __dirname;
@@ -35,7 +37,12 @@ function createRoom(roomId) {
         // 手番のローテーションや同期チェックはこれを基準にする。
         activePlayers: [],
         expectedPlayer: 1,
-        battleResetTimer: null
+        battleResetTimer: null,
+        // [フィールド形状] ROOMで選ばれているマップID(null=人数ごとの既定マップ)
+        mapId: null,
+        mapChangedBy: "",
+        // 実際に始まった対戦のマップID。再接続時のbattle_startでも同じ値を送る。
+        battleMapId: null
     };
 }
 
@@ -46,6 +53,34 @@ function getOrCreateRoom(roomId) {
     return rooms.get(id);
 }
 
+
+/*
+ * [フィールド形状]
+ * 今着席している人数(最低2人として扱う)で使えるマップID。
+ * 選択中のマップがその人数に対応していなければ既定マップになる。
+ */
+function getSeatedCount(room) {
+    return room.battlePlayers.filter(player => player.sessionId).length;
+}
+
+function getEffectiveMapId(room) {
+    return MAPS.resolveMapId(
+        room.mapId,
+        Math.max(CONSTANTS.BATTLE_MIN_PLAYERS_TO_START || 2, getSeatedCount(room))
+    );
+}
+
+function isOwnSeat(room, socket) {
+    const index = socket.playerNumber - 1;
+    const player = room.battlePlayers[index];
+
+    return (
+        socket.playerNumber >= 1 &&
+        socket.playerNumber <= CONSTANTS.BATTLE_MAX_PLAYERS &&
+        !!player &&
+        player.sessionId === socket.sessionId
+    );
+}
 
 function resetBattleRoom(room) {
     if (!room) return;
@@ -59,6 +94,7 @@ function resetBattleRoom(room) {
     room.battleState = null;
     room.activePlayers = [];
     room.expectedPlayer = 1;
+    room.battleMapId = null;
 
     room.battlePlayers = createEmptyBattlePlayers();
 
@@ -102,10 +138,20 @@ function publicRoom(room) {
         roomId: room.roomId,
         battlePlayers: room.battlePlayers.map(player => ({
             name: player.name,
-            ready: !!player.ready
+            ready: !!player.ready,
+            // [卓の強制解放] 席の持ち主の接続が生きているか(ROOMの表示用)
+            connected:
+                !!player.socket &&
+                player.socket.readyState === WebSocket.OPEN
         })),
         spectators: [...room.spectators].map(socket => socket.playerName || "SPECTATOR"),
-        battleStarted: room.battleStarted
+        battleStarted: room.battleStarted,
+        // [フィールド形状]
+        mapId: room.battleStarted && room.battleMapId
+            ? room.battleMapId
+            : getEffectiveMapId(room),
+        selectedMapId: room.mapId,
+        mapChangedBy: room.mapChangedBy
     };
 }
 
@@ -217,6 +263,8 @@ function sendBattleStart(room) {
         room.battleStarted = true;
         room.activePlayers = seatedIndexes.map(index => index + 1);
         room.expectedPlayer = room.activePlayers[0];
+        // [フィールド形状] 開始時点の人数で使えるマップに確定する
+        room.battleMapId = MAPS.resolveMapId(room.mapId, room.activePlayers.length);
     } else {
         // [調査用ログ] 対戦開始後にもう一度呼ばれたことが分かるようにする。
         // ここが出ても、上のガードによりexpectedPlayerはリセットされない。
@@ -230,6 +278,7 @@ function sendBattleStart(room) {
     const payload = {
         type: "battle_start",
         roomId: room.roomId,
+        mapId: room.battleMapId,
         players: seatedIndexes.map(index => ({
             player: index + 1,
             name: room.battlePlayers[index].name,
@@ -500,6 +549,155 @@ function handleMessage(socket, message) {
         return;
     }
 
+    /*
+     * [フィールド形状] ROOMでのマップ選択。
+     * 対戦卓に着席しているプレイヤーなら誰でも変更できる。
+     * 変更すると、選び直したマップを全員が確認できるように
+     * 着席者全員のREADYを解除する。
+     */
+    if (data.type === "room_select_map") {
+        if (room.battleStarted) {
+            send(socket, {
+                type: "room_error",
+                message: "対戦中はマップを変更できません。"
+            });
+            return;
+        }
+
+        if (!isOwnSeat(room, socket)) {
+            send(socket, {
+                type: "room_error",
+                message: "マップを選べるのは対戦卓に着席しているプレイヤーだけです。"
+            });
+            return;
+        }
+
+        const mapId = String(data.mapId || "");
+
+        if (!MAPS.BATTLE_MAPS[mapId]) {
+            send(socket, {
+                type: "room_error",
+                message: "指定されたマップが見つかりません。"
+            });
+            return;
+        }
+
+        if (room.mapId !== mapId) {
+            room.mapId = mapId;
+            room.mapChangedBy = socket.playerName || "";
+
+            room.battlePlayers.forEach(player => {
+                player.ready = false;
+            });
+
+            console.log(`[MAP] room=${room.roomId} map=${mapId} by=${socket.playerName}`);
+        }
+
+        broadcastRoom(room);
+        return;
+    }
+
+    /*
+     * [卓の強制解放]
+     * 行儀の悪い切断などで対戦卓に名前が残ったままになった場合に、
+     * ROOMにいる誰でもその席を空けられるようにする。
+     * 対戦が始まっている(または始まったまま固まっている)場合は、
+     * 席単位ではなく下の「room_force_reset」で対戦ごとリセットする。
+     */
+    if (data.type === "room_force_release") {
+        const playerNumber = Number(data.player);
+
+        if (
+            !Number.isInteger(playerNumber) ||
+            playerNumber < 1 ||
+            playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS
+        ) {
+            return;
+        }
+
+        if (room.battleStarted) {
+            send(socket, {
+                type: "room_error",
+                message: "対戦中(または対戦中のまま固まっている)ため、席ごとの解放はできません。「対戦卓をリセット」を使ってください。"
+            });
+            return;
+        }
+
+        const player = room.battlePlayers[playerNumber - 1];
+        const owner = player.socket;
+
+        console.log(
+            `[FORCE RELEASE] room=${room.roomId} seat=${playerNumber} ` +
+            `name=${player.name} by=${socket.playerName}`
+        );
+
+        player.sessionId = "";
+        player.socket = null;
+        player.name = "";
+        player.ready = false;
+        player.party = [];
+
+        // 持ち主がまだROOMに繋がっていれば、席を外されたことを伝える
+        if (owner && owner.readyState === WebSocket.OPEN && owner.playerNumber === playerNumber) {
+            owner.playerNumber = 0;
+            owner.table = null;
+
+            send(owner, { type: "table_assigned", table: null, playerNumber: 0 });
+            send(owner, {
+                type: "room_notice",
+                message: `${socket.playerName || "誰か"}によって対戦卓${playerNumber}から外されました。`
+            });
+        }
+
+        // 他の接続が同じ席番号を持ったまま残っていれば外しておく
+        for (const peer of room.sockets) {
+            if (peer !== owner && peer.playerNumber === playerNumber && !peer.inBattle) {
+                peer.playerNumber = 0;
+                peer.table = null;
+                send(peer, { type: "table_assigned", table: null, playerNumber: 0 });
+            }
+        }
+
+        broadcastRoom(room);
+        return;
+    }
+
+    /*
+     * [対戦卓の強制リセット]
+     * 対戦が始まったまま固まった(誰もBATTLEにいないのにbattleStartedが
+     * 残っている、切断した人の接続が生きたままになっている等)場合に、
+     * 対戦卓を全部空けて最初からやり直せるようにする。
+     * 進行中の対戦があれば打ち切り、BATTLE画面へ「battle_aborted」を送る。
+     */
+    if (data.type === "room_force_reset") {
+        console.log(
+            `[FORCE RESET] room=${room.roomId} battleStarted=${room.battleStarted} by=${socket.playerName}`
+        );
+
+        for (const peer of room.sockets) {
+            if (peer.inBattle) {
+                send(peer, {
+                    type: "battle_aborted",
+                    by: socket.playerName || ""
+                });
+                peer.inBattle = false;
+            } else if (peer.playerNumber >= 1 && peer.playerNumber <= CONSTANTS.BATTLE_MAX_PLAYERS) {
+                // ROOMで着席していた人の画面の選択状態も解除する
+                send(peer, { type: "table_assigned", table: null, playerNumber: 0 });
+
+                if (peer !== socket) {
+                    send(peer, {
+                        type: "room_notice",
+                        message: `${socket.playerName || "誰か"}が対戦卓をリセットしました。もう一度卓を選んでください。`
+                    });
+                }
+            }
+        }
+
+        resetBattleRoom(room);
+        return;
+    }
+
     if (data.type === "room_ready") {
         if (socket.playerNumber < 1 || socket.playerNumber > CONSTANTS.BATTLE_MAX_PLAYERS) {
             send(socket, {
@@ -766,7 +964,46 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
+/*
+ * [行儀の悪い切断対策 / ハートビート]
+ * スマホの回線断・スリープ・強制終了などでは、サーバー側に
+ * closeが届かず「死んだ接続がOPENのまま残る」ことがある。
+ * そうなると席が解放されず、inBattle扱いのままなので対戦の
+ * 自動リセット(scheduleBattleRoomReset)も走らず卓が固まる。
+ * 一定間隔でpingを送り、pongが返ってこない接続は切断扱いにする
+ * (terminateすると通常のcloseハンドラが走り、席の後始末が行われる)。
+ */
+const HEARTBEAT_INTERVAL_MS = 30000;
+
+const heartbeatTimer = setInterval(() => {
+    wss.clients.forEach(socket => {
+        if (socket.isAlive === false) {
+            console.log(`[HEARTBEAT] 応答のない接続を切断します name=${socket.playerName}`);
+            socket.terminate();
+            return;
+        }
+
+        socket.isAlive = false;
+
+        try {
+            socket.ping();
+        } catch {
+            // 送れない接続は次回のチェックでterminateされる
+        }
+    });
+}, HEARTBEAT_INTERVAL_MS);
+
+wss.on("close", () => {
+    clearInterval(heartbeatTimer);
+});
+
 wss.on("connection", socket => {
+    socket.isAlive = true;
+
+    socket.on("pong", () => {
+        socket.isAlive = true;
+    });
+
     socket.room = null;
     socket.sessionId = null;
     socket.playerNumber = 0;

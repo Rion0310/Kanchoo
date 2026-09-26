@@ -139,8 +139,417 @@
         roomId: FIXED_ROOM_ID,
         battlePlayers: createEmptyBattlePlayers(),
         spectators: [],
-        battleStarted: false
+        battleStarted: false,
+        mapId: null,
+        selectedMapId: null,
+        mapChangedBy: ""
     };
+
+
+    /* ========================================
+       MAP SELECT / TABLE TOOLS (ROOM画面に差し込むUI)
+
+       room.html を書き換えなくても動くよう、必要な要素と
+       スタイルはこのファイルから差し込む。
+       表示位置を変えたい場合は room.html の好きな場所に
+         <div id="room-map-select"></div>
+         <div id="room-table-tools"></div>
+       を置けば、そこに描画される(無ければ対戦卓の直後に自動で作る)。
+    ======================================== */
+
+    /*
+     * マップ定義(shared/battle-maps.js)。
+     * room.html で読み込んでいなければ、ここで自動的に読み込む。
+     */
+    function getMapsApi() {
+        return window.MONSTER_WAR_MAPS || null;
+    }
+
+    function ensureMapsApiLoaded() {
+        if (getMapsApi() || document.getElementById("battle-maps-script")) {
+            return;
+        }
+
+        const script = document.createElement("script");
+        script.id = "battle-maps-script";
+        script.src = "../shared/battle-maps.js";
+        script.addEventListener("load", () => renderRoom());
+        script.addEventListener("error", () => {
+            console.error("shared/battle-maps.js の読み込みに失敗しました。");
+        });
+        document.head.appendChild(script);
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function injectRoomToolStyles() {
+        if (document.getElementById("room-tool-styles")) {
+            return;
+        }
+
+        const style = document.createElement("style");
+        style.id = "room-tool-styles";
+        style.textContent = `
+            .room-map-select {
+                margin: 16px 0;
+                padding: 14px;
+                background: #101010;
+                border: 1px solid #333333;
+                color: #ffffff;
+            }
+            .room-map-select-head {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 6px 12px;
+                margin-bottom: 10px;
+            }
+            .room-map-select-label {
+                color: #888888;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.2em;
+            }
+            .room-map-select-current {
+                font-size: 16px;
+                font-weight: 700;
+            }
+            .room-map-select-sub {
+                color: #888888;
+                font-size: 11px;
+            }
+            .room-map-list {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                gap: 8px;
+            }
+            .room-map-item {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 8px;
+                background: #171717;
+                border: 1px solid #2d2d2d;
+                color: #ffffff;
+                font-family: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+            .room-map-item:hover:not(:disabled) {
+                border-color: #888888;
+                background: #1e1e1e;
+            }
+            .room-map-item:disabled {
+                cursor: default;
+            }
+            .room-map-item.is-current {
+                border-color: #ffffff;
+                box-shadow: inset 0 0 0 1px #ffffff;
+            }
+            .room-map-item strong {
+                font-size: 13px;
+            }
+            .room-map-item span {
+                color: #999999;
+                font-size: 10px;
+                line-height: 1.5;
+            }
+            .room-map-item .map-preview {
+                width: 100%;
+                aspect-ratio: 1;
+                display: grid;
+                grid-template-columns: repeat(var(--preview-size), minmax(0, 1fr));
+                grid-template-rows: repeat(var(--preview-size), minmax(0, 1fr));
+                gap: 1px;
+                padding: 4px;
+                background: #070707;
+            }
+            .room-map-item .map-preview-cell {
+                display: block;
+                background-color: #2a2a2a;
+                background-size: cover;
+                background-position: center;
+            }
+            .room-map-item .map-preview-cell.is-wall {
+                background-color: #6b6b6b;
+            }
+            .room-map-item .map-preview-cell.is-void {
+                background: transparent;
+            }
+            .room-map-note {
+                margin: 8px 0 0;
+                color: #777777;
+                font-size: 10px;
+            }
+
+            .room-seat-release {
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                z-index: 2;
+                padding: 2px 6px;
+                border: 1px solid #b85252;
+                background: rgba(40, 16, 16, 0.92);
+                color: #ff9a9a;
+                font-family: inherit;
+                font-size: 10px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .room-seat-release:hover {
+                background: #5a1f1f;
+                color: #ffffff;
+            }
+            .room-seat-offline {
+                position: absolute;
+                left: 4px;
+                top: 4px;
+                z-index: 2;
+                padding: 1px 5px;
+                background: #3a2a10;
+                color: #e7c86a;
+                font-size: 9px;
+                font-weight: 700;
+            }
+
+            .room-table-tools {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px 12px;
+                margin: 8px 0 16px;
+                color: #999999;
+                font-size: 11px;
+            }
+            .room-table-tools.is-stuck {
+                padding: 8px 10px;
+                border: 1px solid #91804b;
+                background: #1d1b16;
+                color: #e7c86a;
+            }
+            .room-force-reset {
+                padding: 6px 12px;
+                border: 1px solid #6b2f2f;
+                background: #1d1616;
+                color: #ff9a9a;
+                font-family: inherit;
+                font-size: 11px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .room-force-reset:hover {
+                background: #2b1d1d;
+                border-color: #b85252;
+                color: #ffffff;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function ensureToolContainer(id, className) {
+        let element = document.getElementById(id);
+
+        if (!element) {
+            element = document.createElement("div");
+            element.id = id;
+
+            const anchor =
+                document.getElementById("room-table-tools") ||
+                battleTable;
+
+            if (anchor && anchor.parentNode) {
+                anchor.insertAdjacentElement("afterend", element);
+            } else {
+                document.body.appendChild(element);
+            }
+        }
+
+        element.classList.add(className);
+
+        return element;
+    }
+
+    function isSeated() {
+        return (
+            isValidPlayerNumber(myPlayerNumber) &&
+            !!roomState.battlePlayers?.[myPlayerNumber - 1]?.name
+        );
+    }
+
+    function renderMapSelect() {
+        const api = getMapsApi();
+
+        if (!api) {
+            ensureMapsApiLoaded();
+            return;
+        }
+
+        const container = ensureToolContainer("room-map-select", "room-map-select");
+
+        const seatedCount =
+            (roomState.battlePlayers || []).filter(player => player?.name).length;
+        const playerCount = Math.max(2, seatedCount);
+
+        const currentMapId = roomState.mapId;
+        const currentMap = api.BATTLE_MAPS[currentMapId];
+        const canChoose = isSeated() && !roomState.battleStarted;
+        const maps = api.getMapsForPlayerCount(playerCount);
+
+        const wasAutoFallback =
+            roomState.selectedMapId &&
+            roomState.selectedMapId !== currentMapId;
+
+        container.innerHTML = `
+            <div class="room-map-select-head">
+                <span class="room-map-select-label">FIELD</span>
+                <span class="room-map-select-current">
+                    ${escapeHtml(currentMap?.name || "―")}
+                </span>
+                <span class="room-map-select-sub">
+                    ${playerCount}人対戦
+                    ${roomState.mapChangedBy ? ` ・ ${escapeHtml(roomState.mapChangedBy)} が選択` : ""}
+                    ${wasAutoFallback ? " ・ 選択中のマップはこの人数では使えないため既定マップになります" : ""}
+                </span>
+            </div>
+            <div class="room-map-list">
+                ${maps.map(map => `
+                    <button
+                        type="button"
+                        class="room-map-item${map.id === currentMapId ? " is-current" : ""}"
+                        data-map-id="${escapeHtml(map.id)}"
+                        ${canChoose ? "" : "disabled"}
+                    >
+                        ${api.buildMapPreviewHtml(map, C.PLAYER_COLORS || {})}
+                        <strong>${escapeHtml(map.name)}</strong>
+                        <span>${escapeHtml(map.description || "")}</span>
+                    </button>
+                `).join("")}
+            </div>
+            <p class="room-map-note">
+                ${
+                    roomState.battleStarted
+                        ? "対戦中はマップを変更できません。"
+                        : canChoose
+                            ? "対戦卓に着席している人なら誰でも変更できます。変更すると全員の準備が解除されます。"
+                            : "対戦卓に着席するとマップを選べます。"
+                }
+            </p>
+        `;
+
+        container.querySelectorAll(".room-map-item").forEach(button => {
+            button.addEventListener("click", () => {
+                if (!canChoose || button.dataset.mapId === currentMapId) {
+                    return;
+                }
+
+                send({ type: "room_select_map", mapId: button.dataset.mapId });
+            });
+        });
+    }
+
+    /*
+     * [卓の強制解放]
+     * 自分以外が座っている対戦卓に「解放」ボタンを出す。
+     * 持ち主の接続が切れている席には「切断中」を表示する。
+     */
+    function renderSeatReleaseButtons() {
+        const players = roomState.battlePlayers || [];
+
+        battleSlots.forEach(({ player, slotEl }) => {
+            if (!slotEl) {
+                return;
+            }
+
+            slotEl.querySelector(".room-seat-release")?.remove();
+            slotEl.querySelector(".room-seat-offline")?.remove();
+
+            const info = players[player - 1];
+
+            if (!info?.name) {
+                return;
+            }
+
+            if (getComputedStyle(slotEl).position === "static") {
+                slotEl.style.position = "relative";
+            }
+
+            if (info.connected === false) {
+                const offline = document.createElement("span");
+                offline.className = "room-seat-offline";
+                offline.textContent = "切断中";
+                slotEl.appendChild(offline);
+            }
+
+            if (player === myPlayerNumber || roomState.battleStarted) {
+                return;
+            }
+
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "room-seat-release";
+            button.textContent = "解放";
+            button.title = "この席を強制的に空けます";
+
+            button.addEventListener("click", event => {
+                // 枠全体のクリック(=その卓に座る)を発火させない
+                event.stopPropagation();
+
+                const ok = window.confirm(
+                    `対戦卓${player}（${info.name}）を強制的に空けますか？`
+                );
+
+                if (ok) {
+                    send({ type: "room_force_release", player });
+                }
+            });
+
+            slotEl.appendChild(button);
+        });
+    }
+
+    /*
+     * [対戦卓の強制リセット]
+     * 対戦卓を全部空けて、固まった対戦状態も解除する。
+     */
+    function renderTableTools() {
+        const container = ensureToolContainer("room-table-tools", "room-table-tools");
+
+        const stuck = !!roomState.battleStarted;
+
+        container.classList.toggle("is-stuck", stuck);
+
+        container.innerHTML = `
+            <span>
+                ${
+                    stuck
+                        ? "対戦中です。対戦が終わっているのに卓が空かない場合はリセットしてください。"
+                        : "卓の表示がおかしいときは、対戦卓をリセットできます。"
+                }
+            </span>
+            <button type="button" class="room-force-reset">
+                対戦卓をリセット
+            </button>
+        `;
+
+        container.querySelector(".room-force-reset")?.addEventListener("click", () => {
+            const ok = window.confirm(
+                stuck
+                    ? "進行中の対戦を打ち切って、対戦卓をすべて空けます。よろしいですか？"
+                    : "対戦卓をすべて空けます。よろしいですか？"
+            );
+
+            if (ok) {
+                send({ type: "room_force_reset" });
+            }
+        });
+    }
 
     function getParty() {
         try {
@@ -275,6 +684,10 @@
 
             readyButton.classList.toggle("ready", ready);
         }
+
+        renderSeatReleaseButtons();
+        renderTableTools();
+        renderMapSelect();
     }
 
     function send(payload) {
@@ -397,6 +810,11 @@
                 const assigned = Number(message.playerNumber);
                 myPlayerNumber = isValidPlayerNumber(assigned) ? assigned : 0;
 
+                // [卓の強制解放/リセット] 席を外された場合は準備状態も解除
+                if (!myPlayerNumber) {
+                    myReady = false;
+                }
+
                 resolveMyPlayerNumber();
                 renderRoom();
                 break;
@@ -404,6 +822,14 @@
 
             case "room_error": {
                 window.alert(message.message || "卓のアサインに失敗しました。");
+                break;
+            }
+
+            // [卓の強制解放/リセット] 他の人の操作で席を外されたときのお知らせ
+            case "room_notice": {
+                if (message.message) {
+                    window.alert(message.message);
+                }
                 break;
             }
 
@@ -501,6 +927,8 @@
         window.location.href = "../title/title.html";
     });
 
+    injectRoomToolStyles();
+    ensureMapsApiLoaded();
     renderRoom();
     connect();
 })();
