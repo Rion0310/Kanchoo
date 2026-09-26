@@ -487,7 +487,7 @@ const characterDatabase = [
     {
         id: 18,
         name: "Nigger",
-        image: "../images/nigger.png",
+        image: "../images/nigger.PNG",
         hp: 150,
         attack: 300,
         defense: 100,
@@ -499,7 +499,7 @@ const characterDatabase = [
     {
         id: 19,
         name: "トイレットペーパー工場のおじさん",
-        image: "../images/toiko.PNG",
+        image: "../images/Toiko.PNG",
         hp: 160,
         attack: 170,
         defense: 80,
