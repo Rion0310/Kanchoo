@@ -178,7 +178,7 @@ const skillDatabase = [
     {
         id: 14,
         name: "神風カンチョー",
-        power: 999,
+        power: 500,
         effect: "kamikaze_damage",
         description: "自らを犠牲に、対象へ大ダメージを与える。",
         targeting: {
@@ -489,8 +489,8 @@ const characterDatabase = [
         name: "Nigger",
         image: "../images/nigger.PNG",
         hp: 150,
-        attack: 300,
-        defense: 100,
+        attack: 250,
+        defense: 150,
         move: 3,
         description: "しおんの覚醒した姿、文明破壊兵器",
         type: "attacker",
