@@ -4743,17 +4743,19 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 }
 
 /* ネガポジ: 色の反転を回数分チカチカさせる */
-.fx-negaposi-1 { animation: fx-negaposi 0.18s steps(1) 1; }
-.fx-negaposi-2 { animation: fx-negaposi 0.18s steps(1) 2; }
-.fx-negaposi-3 { animation: fx-negaposi 0.18s steps(1) 3; }
+/* 1回 = 約0.06秒反転 → 戻る。回数は battle-fx.js の NEGAPOSI_TIMES */
+.fx-negaposi-1 { animation: fx-negaposi 0.13s steps(1) 1; }
+.fx-negaposi-2 { animation: fx-negaposi 0.13s steps(1) 2; }
+.fx-negaposi-3 { animation: fx-negaposi 0.13s steps(1) 3; }
 
 /* シェイクとネガポジを同時にかけるため、両方のクラスが付いたら合成する */
-.fx-shake.fx-negaposi-1 { animation: fx-shake 0.42s cubic-bezier(.36,.07,.19,.97), fx-negaposi 0.18s steps(1) 1; }
-.fx-shake.fx-negaposi-2 { animation: fx-shake 0.42s cubic-bezier(.36,.07,.19,.97), fx-negaposi 0.18s steps(1) 2; }
-.fx-shake.fx-negaposi-3 { animation: fx-shake 0.42s cubic-bezier(.36,.07,.19,.97), fx-negaposi 0.18s steps(1) 3; }
+.fx-shake.fx-negaposi-1 { animation: fx-shake 0.42s cubic-bezier(.36,.07,.19,.97), fx-negaposi 0.13s steps(1) 1; }
+.fx-shake.fx-negaposi-2 { animation: fx-shake 0.42s cubic-bezier(.36,.07,.19,.97), fx-negaposi 0.13s steps(1) 2; }
+.fx-shake.fx-negaposi-3 { animation: fx-shake 0.42s cubic-bezier(.36,.07,.19,.97), fx-negaposi 0.13s steps(1) 3; }
 
+/* 完全な反転(1)より少し弱め。コントラスト強調もしない */
 @keyframes fx-negaposi {
-    0%   { filter: invert(1) hue-rotate(180deg) contrast(1.4); }
+    0%   { filter: invert(0.85) hue-rotate(180deg); }
     50%  { filter: none; }
 }
 
@@ -4767,7 +4769,7 @@ body.multiplayer-3plus .player-status-2.slot-solo {
 }
 
 @keyframes fx-screen-flash {
-    from { opacity: 0.85; }
+    from { opacity: var(--flash-opacity, 0.3); }
     to   { opacity: 0; }
 }
 
@@ -4828,7 +4830,7 @@ body.multiplayer-3plus .player-status-2.slot-solo {
     width: calc(var(--cell) * 1.6);
     height: calc(var(--cell) * 1.6);
     border-radius: 50%;
-    background: radial-gradient(circle, #ffffff 0%, var(--color) 35%, transparent 70%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, var(--color) 35%, transparent 70%);
     mix-blend-mode: screen;
     animation: fx-burst 0.5s ease-out forwards;
 }

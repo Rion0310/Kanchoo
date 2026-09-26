@@ -40,6 +40,16 @@ const SHOW_DAMAGE_NUMBERS = true;
 const HEAVY_POWER = 500;
 const HEAVY_DAMAGE_RATIO = 0.5;
 
+/*
+ * 光の強さ。眩しすぎる場合はここを下げる。
+ *   NEGAPOSI_TIMES      … ネガポジ(色反転)の回数。0でネガポジなし
+ *   NEGAPOSI_ONLY_ON_KILL … trueなら撃破・自爆のときだけネガポジ
+ *   FLASH_OPACITY       … 白/金色の全画面フラッシュの濃さ(0〜1)
+ */
+const NEGAPOSI_TIMES = 1;
+const NEGAPOSI_ONLY_ON_KILL = true;
+const FLASH_OPACITY = 0.3;
+
 const FX_LEVEL_KEY = "monster_war_fx_level";
 const FX_LEVELS = ["full", "mild", "off"];
 const FX_LEVEL_LABELS = { full: "FX 派手", mild: "FX 控えめ", off: "FX OFF" };
@@ -221,11 +231,12 @@ function shake(level = 1) {
     restartClass(el, "fx-shake", 420);
 }
 
-function negaPosi(times = 2) {
-    if (!isFull()) return;
+function negaPosi(times = NEGAPOSI_TIMES) {
+    if (!isFull() || times <= 0) return;
 
+    const count = Math.max(1, Math.min(3, times));
     const el = screenEl();
-    restartClass(el, `fx-negaposi-${Math.min(3, times)}`, 90 * times * 2 + 40);
+    restartClass(el, `fx-negaposi-${count}`, 130 * count + 40);
 }
 
 function whiteFlash(color = "#ffffff") {
@@ -234,6 +245,7 @@ function whiteFlash(color = "#ffffff") {
     const flash = document.createElement("div");
     flash.className = "fx-screen-flash";
     flash.style.background = color;
+    flash.style.setProperty("--flash-opacity", String(FLASH_OPACITY));
     document.body.appendChild(flash);
     setTimeout(() => flash.remove(), 260);
 }
@@ -489,7 +501,9 @@ async function playSkill(fx, ctx) {
     // 3) 技の型ごとの演出
     if (["strike", "pierce", "curse", "explosion"].includes(style)) {
         if (heavy) {
-            negaPosi(style === "explosion" || killed ? 3 : 2);
+            if (!NEGAPOSI_ONLY_ON_KILL || style === "explosion" || killed) {
+                negaPosi();
+            }
             zoomPunch(ctx);
             shake(3);
             playSound(style === "explosion" ? "explosion" : "heavy");
