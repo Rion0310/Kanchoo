@@ -475,7 +475,7 @@ const characterDatabase = [
     {
         id: 17,
         name: "なぎさ",
-        image: "../images/nagisa.png",
+        image: "../images/nagisa.PNG",
         hp: 150,
         attack: 200,
         defense: 80,
@@ -499,7 +499,7 @@ const characterDatabase = [
     {
         id: 19,
         name: "トイレットペーパー工場のおじさん",
-        image: "../images/toiko.png",
+        image: "../images/toiko.PNG",
         hp: 160,
         attack: 170,
         defense: 80,
@@ -511,7 +511,7 @@ const characterDatabase = [
     {
         id: 20,
         name: "捏造師",
-        image: "../images/netsuzoushi.png",
+        image: "../images/netsuzoushi.PNG",
         hp: 150,
         attack: 170,
         defense: 100,
