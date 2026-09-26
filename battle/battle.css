@@ -4579,3 +4579,126 @@ body.multiplayer-3plus .player-status-2.slot-solo {
         inset 0 0 0 999px rgba(255, 255, 255, 0.10),
         inset 0 0 0 2px #ffffff;
 }
+
+
+/* ============================================================
+   CENTER CASTLE (中央の城)
+   --hold-color は占拠しているプレイヤーの色(battle.jsが設定)
+============================================================ */
+
+.board-cell.center-castle,
+.board-cell.center-castle.alt-cell {
+    background:
+        radial-gradient(
+            circle,
+            rgba(255, 215, 90, 0.26),
+            rgba(120, 90, 25, 0.18) 70%
+        ) !important;
+
+    /* 枠は範囲全体の.center-castle-areaが描くので、マスごとの枠は出さない */
+    box-shadow: none;
+    border-color: rgba(231, 200, 106, 0.18);
+}
+
+.board-cell.center-castle.movable {
+    box-shadow:
+        inset 0 0 0 999px rgba(255, 255, 255, 0.12);
+}
+
+/* 範囲全体を覆う1枚の枠。盤面グリッドの上に重ねる(クリックは下のマスへ通す) */
+.center-castle-area {
+    position: relative;
+    z-index: 3;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    pointer-events: none;
+    user-select: none;
+
+    box-shadow:
+        inset 0 0 0 2px rgba(231, 200, 106, 0.95),
+        inset 0 0 22px rgba(255, 200, 60, 0.3);
+}
+
+.center-castle-label {
+    color: #f5d77a;
+    font-size: clamp(14px, 2.4vw, 30px);
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.55;
+    text-shadow: 0 1px 6px #000000;
+}
+
+.center-castle-count {
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    z-index: 3;
+    transform: translate(-50%, 50%);
+
+    padding: 1px 6px;
+    background: #2a2412;
+    border: 1px solid #e7c86a;
+    color: #f5d77a;
+    font-size: clamp(8px, 0.85vw, 11px);
+    font-weight: 900;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+/* 占拠中: 占拠しているプレイヤーの色で光る */
+.center-castle-area.is-held {
+    box-shadow:
+        inset 0 0 0 3px var(--hold-color),
+        inset 0 0 28px var(--hold-color);
+    animation: center-hold-pulse 1.6s ease-in-out infinite;
+}
+
+.center-castle-area.is-held .center-castle-count {
+    background: var(--hold-color);
+    border-color: var(--hold-color);
+    color: #050505;
+}
+
+/* 争奪中: 白く点滅 */
+.center-castle-area.is-contested {
+    box-shadow:
+        inset 0 0 0 3px #ffffff,
+        inset 0 0 22px rgba(255, 255, 255, 0.35);
+    animation: center-hold-pulse 0.9s ease-in-out infinite;
+}
+
+/* 占拠チームが中にいない: 色は残すが控えめにしてカウント停止中と分かるように */
+.center-castle-area.is-held.is-paused {
+    animation: none;
+    opacity: 0.55;
+    box-shadow:
+        inset 0 0 0 3px var(--hold-color),
+        inset 0 0 12px var(--hold-color);
+}
+
+/* 争奪中は占拠色より優先して白く点滅 */
+.center-castle-area.is-held.is-contested {
+    box-shadow:
+        inset 0 0 0 3px #ffffff,
+        inset 0 0 22px var(--hold-color);
+    animation: center-hold-pulse 0.9s ease-in-out infinite;
+    opacity: 1;
+}
+
+@keyframes center-hold-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ヘッダーのターン表示に出す占拠状況 */
+.turn-indicator-center {
+    padding: 1px 8px;
+    border: 1px solid var(--hold-color);
+    color: var(--hold-color);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}

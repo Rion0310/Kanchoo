@@ -236,6 +236,7 @@ function serializeBattleState() {
         eliminatedPlayers: battleState.eliminatedPlayers,
         // [フィールド形状]
         mapId: battleState.mapId,
+        centerHold: battleState.centerHold,
         selectedUnitId: battleState.selectedUnitId,
         movableCells: battleState.movableCells,
         units: battleState.units,
@@ -358,6 +359,10 @@ function applyOnlineState(state) {
         new Set(Array.isArray(state.bluffUnits) ? state.bluffUnits : []);
     battleState.bluffUses =
         state.bluffUses || battleState.bluffUses;
+    battleState.centerHold =
+        state.centerHold && typeof state.centerHold === "object"
+            ? state.centerHold
+            : null;
     battleState.currentTrackCharacterId =
         state.currentTrackCharacterId != null
             ? state.currentTrackCharacterId
@@ -1229,7 +1234,7 @@ function getCellTerrain(row, column) {
     const { type } = getLegendEntry(getMapChar(row, column));
 
     if (type === "wall") return "wall";
-    if (type === "floor" || type.startsWith("castle")) return "floor";
+    if (type === "floor" || type === "center" || type.startsWith("castle")) return "floor";
 
     return "void";
 }
@@ -1284,6 +1289,358 @@ function getSiegeCastles() {
     return castles;
 }
 
+
+/* ========================================
+   CENTER CASTLE (中央の城)
+
+   マップに "C" で置く、誰の物でもない城。Cを並べた範囲(2×2など)全体で1つの城。
+   ・誰も占拠していない城に1チームのコマだけが入ると、そのチームの占拠(色)になる。
+   ・占拠チーム(A)のコマが全員出ても占拠はAのまま残る。Aのコマが1体もいない状態で
+     別の1チーム(B)のコマだけが入ったときに、初めてBに塗り替わる(カウント0から)。
+     死体は数えない。
+   ・占拠チームの手番が来たとき、範囲にそのチームのコマだけがいれば+1。
+     centerHoldTurns 回(既定5回)に達したら勝ち。空っぽ・敵と混在している間は
+     カウントを保ったまま止まる。(占拠した手番は数えない)
+   ・範囲内のコマが敵の攻撃を受けると、攻撃が来た方向の反対側へ
+     範囲の外まで押し出される(ノックバック)。そのコマが占拠側なら
+     カウントは0に戻る(他の味方が残っていても占拠自体は続く)。
+   ・「移動をやり直す」で取り消せるよう、占拠の判定は移動した瞬間ではなく
+     行動を確定した時(finishUnitAction)と手番交代時に行う。
+======================================== */
+
+const DEFAULT_CENTER_HOLD_TURNS = 5;
+
+// 範囲の外に出たあと、さらに何マス押し出すか(0 = 範囲のすぐ外で止まる)
+const CENTER_CASTLE_EXTRA_KNOCKBACK = 0;
+
+function getCenterCastleCells() {
+    const map = getCurrentMap();
+
+    if (!map) {
+        return [];
+    }
+
+    const { grid } = getNormalizedMap(map);
+    const cells = [];
+
+    grid.forEach((line, rowIndex) => {
+        line.forEach((char, columnIndex) => {
+            if (getLegendEntry(char).type === "center") {
+                cells.push({ row: rowIndex + 1, column: columnIndex + 1 });
+            }
+        });
+    });
+
+    return cells;
+}
+
+function isCenterCastleCell(row, column) {
+    return getCenterCastleCells().some(
+        cell => cell.row === row && cell.column === column
+    );
+}
+
+function getCenterHoldTurns() {
+    return Number(getCurrentMap()?.centerHoldTurns) || DEFAULT_CENTER_HOLD_TURNS;
+}
+
+function getCenterCastleOccupants() {
+    return getCenterCastleCells()
+        .map(cell => getUnitAt(cell.row, cell.column))
+        .filter(Boolean);
+}
+
+/*
+ * 範囲内のコマ(生存しているものだけ。死体は数えない)の持ち主一覧。
+ */
+function getCenterCastlePlayersInside() {
+    return [...new Set(getCenterCastleOccupants().map(unit => Number(unit.player)))];
+}
+
+/*
+ * 占拠状態(色)の更新。
+ *
+ * [塗り替わりのルール]
+ * ・占拠しているチーム(A)のコマが範囲から全員いなくなっても、占拠はAのまま残る。
+ * ・「Aのコマが1体もいない」状態で、別の1チーム(B)のコマだけが範囲にいるとき、
+ *   初めてBに塗り替わる(カウントは0から)。
+ * ・A以外の複数チームが同時に入っている間は塗り替わらない。
+ * ・Aが脱落した場合は占拠も消える。
+ */
+function updateCenterHold() {
+    if (getCenterCastleCells().length === 0) {
+        battleState.centerHold = null;
+        return;
+    }
+
+    let hold = battleState.centerHold;
+
+    if (hold && battleState.eliminatedPlayers.includes(Number(hold.player))) {
+        battleState.centerHold = null;
+        hold = null;
+    }
+
+    const players = getCenterCastlePlayersInside();
+
+    if (!hold) {
+        if (players.length === 1) {
+            battleState.centerHold = { player: players[0], count: 0 };
+
+            addBattleLog(
+                `${getPlayerDisplayName(players[0])}が中央の城を占拠！（${getCenterHoldTurns()}ターン守れば勝ち）`
+            );
+        }
+
+        return;
+    }
+
+    const ownerInside = players.includes(Number(hold.player));
+
+    if (!ownerInside && players.length === 1) {
+        const previous = hold.player;
+
+        battleState.centerHold = { player: players[0], count: 0 };
+
+        addBattleLog(
+            `中央の城が${getPlayerDisplayName(previous)}から${getPlayerDisplayName(players[0])}に塗り替わった！`
+        );
+    }
+}
+
+/*
+ * 占拠しているチームのコマだけが範囲にいる(=守っている)状態か。
+ * カウントが進むのはこの状態のときだけ。
+ */
+function isCenterHoldActive() {
+    const hold = battleState.centerHold;
+
+    if (!hold) {
+        return false;
+    }
+
+    const players = getCenterCastlePlayersInside();
+
+    return players.length === 1 && players[0] === Number(hold.player);
+}
+
+/*
+ * 手番が回ってきた時点で呼ぶ。占拠している人の番で、かつ
+ * そのチームのコマだけが範囲にいれば+1。規定ターンに達したら勝利。
+ * 空っぽ・敵と混在している間はカウントを保ったまま止まる。
+ */
+function advanceCenterHoldCount() {
+    updateCenterHold();
+
+    const hold = battleState.centerHold;
+
+    if (
+        !hold ||
+        battleState.gameOver ||
+        Number(hold.player) !== Number(battleState.currentPlayer) ||
+        !isCenterHoldActive()
+    ) {
+        return;
+    }
+
+    hold.count += 1;
+
+    const required = getCenterHoldTurns();
+
+    addBattleLog(
+        `${getPlayerDisplayName(hold.player)}が中央の城を守っている（${hold.count}/${required}）`
+    );
+
+    if (hold.count >= required) {
+        showBattleResult(
+            hold.player,
+            `中央の城を${required}ターン守り抜いた`
+        );
+    }
+}
+
+/*
+ * 中央の城の範囲にいるコマが敵の攻撃を受けたときのノックバック。
+ * 攻撃が来た方向の反対側(縦横の差が大きいほうの軸)へ、範囲の外に出るまで押し出す。
+ * そちらが塞がっていればもう一方の軸を試す。どちらも駄目ならその場に残る。
+ */
+function knockbackFromCenterCastle(attacker, target) {
+    if (
+        !attacker ||
+        !target ||
+        !target.alive ||
+        Number(attacker.player) === Number(target.player) ||
+        !isCenterCastleCell(target.row, target.column)
+    ) {
+        return;
+    }
+
+    // 占拠側のコマが攻撃を受けたらカウントは0に戻る
+    if (
+        battleState.centerHold &&
+        Number(battleState.centerHold.player) === Number(target.player)
+    ) {
+        battleState.centerHold.count = 0;
+    }
+
+    const rowDiff = target.row - attacker.row;
+    const columnDiff = target.column - attacker.column;
+
+    const rowStep = { row: Math.sign(rowDiff), column: 0 };
+    const columnStep = { row: 0, column: Math.sign(columnDiff) };
+
+    const directions = (
+        Math.abs(rowDiff) >= Math.abs(columnDiff)
+            ? [rowStep, columnStep]
+            : [columnStep, rowStep]
+    ).filter(step => step.row !== 0 || step.column !== 0);
+
+    let destination = null;
+
+    for (const step of directions) {
+        let row = target.row;
+        let column = target.column;
+        let failed = false;
+
+        // 1) 範囲の外に出るまで1マスずつ進む。範囲内で塞がれたらこの方向は失敗
+        while (isCenterCastleCell(row, column)) {
+            const nextRow = row + step.row;
+            const nextColumn = column + step.column;
+
+            if (
+                !isPlayableCell(nextRow, nextColumn) ||
+                getUnitAt(nextRow, nextColumn)
+            ) {
+                failed = true;
+                break;
+            }
+
+            row = nextRow;
+            column = nextColumn;
+        }
+
+        if (failed) {
+            continue;
+        }
+
+        // 2) 追加のノックバック(塞がれたらそこで止まる)
+        for (let extra = 0; extra < CENTER_CASTLE_EXTRA_KNOCKBACK; extra++) {
+            const nextRow = row + step.row;
+            const nextColumn = column + step.column;
+
+            if (
+                !isPlayableCell(nextRow, nextColumn) ||
+                getUnitAt(nextRow, nextColumn)
+            ) {
+                break;
+            }
+
+            row = nextRow;
+            column = nextColumn;
+        }
+
+        destination = { row, column };
+        break;
+    }
+
+    if (destination) {
+        target.row = destination.row;
+        target.column = destination.column;
+        addBattleLog(`${target.name}は中央の城から押し出された！`);
+    } else {
+        addBattleLog(`${target.name}は踏みとどまった！`);
+    }
+
+    updateCenterHold();
+}
+
+/*
+ * 中央の城の表示。
+ * 範囲のマスには金色の背景(.center-castle)を付け、さらに範囲全体を覆う
+ * 1枚の枠(.center-castle-area)を盤面のグリッドに重ねて「王」とカウントを出す。
+ * 枠の位置は自分視点の反転(updateBoardPerspective)に合わせて計算する。
+ */
+function getVisualGridPosition(row, column) {
+    const playerNumber = Number(MY_PLAYER_NUMBER);
+    const flipRow = playerNumber === 2 || playerNumber === 3;
+    const flipColumn = playerNumber === 2 || playerNumber === 4;
+
+    return {
+        row: flipRow ? BOARD_SIZE - row + 1 : row,
+        column: flipColumn ? BOARD_SIZE - column + 1 : column
+    };
+}
+
+function renderCenterCastle() {
+    if (!battleField) {
+        return;
+    }
+
+    battleField
+        .querySelectorAll(".board-cell.center-castle")
+        .forEach(cell => cell.classList.remove("center-castle"));
+
+    battleField.querySelector(".center-castle-area")?.remove();
+
+    const cells = getCenterCastleCells();
+
+    if (cells.length === 0) {
+        return;
+    }
+
+    cells.forEach(({ row, column }) => {
+        getCell(row, column)?.classList.add("center-castle");
+    });
+
+    const visual = cells.map(({ row, column }) => getVisualGridPosition(row, column));
+    const minRow = Math.min(...visual.map(v => v.row));
+    const maxRow = Math.max(...visual.map(v => v.row));
+    const minColumn = Math.min(...visual.map(v => v.column));
+    const maxColumn = Math.max(...visual.map(v => v.column));
+
+    const area = document.createElement("div");
+    area.className = "center-castle-area";
+    area.style.gridRow = `${minRow} / ${maxRow + 1}`;
+    area.style.gridColumn = `${minColumn} / ${maxColumn + 1}`;
+    area.innerHTML = `<span class="center-castle-label">王</span><small class="center-castle-count"></small>`;
+
+    battleField.appendChild(area);
+
+    updateCenterCastleMark();
+}
+
+function updateCenterCastleMark() {
+    const area = battleField?.querySelector(".center-castle-area");
+
+    if (!area) {
+        return;
+    }
+
+    const hold = battleState.centerHold;
+    const required = getCenterHoldTurns();
+    const count = area.querySelector(".center-castle-count");
+
+    const playersInside = getCenterCastlePlayersInside();
+
+    area.classList.toggle("is-held", !!hold);
+    // 複数チームが入っている(争奪中)
+    area.classList.toggle("is-contested", playersInside.length > 1);
+    // 占拠チームのコマが中にいない(色は残っているがカウントは止まっている)
+    area.classList.toggle(
+        "is-paused",
+        !!hold && !playersInside.includes(Number(hold.player))
+    );
+
+    if (hold) {
+        area.style.setProperty("--hold-color", getPlayerColorHex(hold.player));
+    } else {
+        area.style.removeProperty("--hold-color");
+    }
+
+    if (count) {
+        count.textContent = `${hold ? hold.count : 0}/${required}`;
+    }
+}
+
 const battleState = {
 
     turn: 1,
@@ -1305,6 +1662,12 @@ const battleState = {
      * [フィールド形状] 使用中のマップID(BATTLE_MAPSのキー)。オンラインでは同期対象。
      */
     mapId: null,
+
+    /*
+     * [中央の城] 占拠しているプレイヤーと、その手番が何回回ってきたか。
+     * { player, count } または null。オンラインでは同期対象。
+     */
+    centerHold: null,
 
     /*
      * 脱落済みのプレイヤー番号一覧。
@@ -1651,6 +2014,11 @@ function updateBoardPerspective() {
                 String(flipColumn ? BOARD_SIZE - column + 1 : column);
         });
 
+    // [中央の城] 範囲の枠も自分視点の向きに合わせて置き直す
+    if (typeof renderCenterCastle === "function" && battleField.querySelector(".center-castle-area")) {
+        renderCenterCastle();
+    }
+
 }
 
 
@@ -1774,6 +2142,7 @@ function createBoard() {
 
     updateBoardPerspective();
     renderCastles();
+    renderCenterCastle();
 }
 
 
@@ -2168,7 +2537,7 @@ function getFormationPositions(
     }
 
     const otherCastleKeys = new Set(
-        Object.values(getSiegeCastles())
+        [...Object.values(getSiegeCastles()), ...getCenterCastleCells()]
             .map(other => `${other.row},${other.column}`)
     );
 
@@ -2230,6 +2599,9 @@ function getFormationPositions(
 ======================================== */
 
 function createUnits() {
+
+    // [中央の城] 新しい対戦なので占拠状態も初期化
+    battleState.centerHold = null;
 
     battleState.units = [];
 
@@ -3155,6 +3527,9 @@ function areAllCurrentPlayerUnitsActed() {
 }
 
 function finishUnitAction() {
+
+    // [中央の城] 行動が確定したこのタイミングで占拠状態を判定する
+    updateCenterHold();
 
     battleState.actionPhase = null;
     battleState.actionOriginRow = null;
@@ -4510,6 +4885,11 @@ function applyDamage(
         target.guardNextTurn = false;
     }
 
+    // [中央の城] 敵の攻撃が通った(ブラフで防がれていない)ならノックバック
+    if (!bluffAbsorbed) {
+        knockbackFromCenterCastle(attacker, target);
+    }
+
     checkVictoryCondition();
 }
 
@@ -5505,6 +5885,20 @@ function updateTurnIndicators() {
         }
     }
 
+    // [中央の城] 盤面の表示とヘッダーの占拠状況
+    updateCenterCastleMark();
+
+    if (indicator && battleState.centerHold && !battleState.gameOver) {
+        const hold = battleState.centerHold;
+
+        indicator.insertAdjacentHTML(
+            "beforeend",
+            `<span class="turn-indicator-center" style="--hold-color:${getPlayerColorHex(hold.player)}">
+                王 ${escapeHtml(getPlayerDisplayName(hold.player))} ${hold.count}/${getCenterHoldTurns()}${isCenterHoldActive() ? "" : "（停止中）"}
+            </span>`
+        );
+    }
+
     // 詳細オーバーレイを開いたまま状態が更新された場合は中身も最新にする
     refreshUnitDetailOverlay();
 }
@@ -5859,6 +6253,9 @@ function advanceToNextPlayer() {
 
     battleState.currentPlayer = active[nextIndex];
 
+    // [中央の城] 占拠している人の番が回ってきたらカウント(規定数で勝利)
+    advanceCenterHoldCount();
+
     /*
      * [ガード/ブラフ／「自分の次のターンまで有効」の失効処理]
      * 手番が回ってきたプレイヤー自身の、まだ発動していない
@@ -5988,7 +6385,11 @@ function endTurn() {
      * ここでの一括リセットは削除した。
      */
 
-    if (battleState.currentPlayer === Number(MY_PLAYER_NUMBER)) {
+    // [中央の城] 手番交代の瞬間に決着した場合はYOUR TURNを出さない
+    if (
+        !battleState.gameOver &&
+        battleState.currentPlayer === Number(MY_PLAYER_NUMBER)
+    ) {
         showYourTurnCutIn();
     }
 
