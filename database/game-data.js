@@ -204,7 +204,7 @@ const skillDatabase = [
         id: 16,
         name: "斬チョー",
         type: "物理",
-        power: 70,
+        power: 100,
         effect: "damage",
         // [FX] 当たった相手のアイコンが真っ二つに割れてずれる演出(battle-fx.js の cleave)
         fx: "cleave",
@@ -218,7 +218,7 @@ const skillDatabase = [
         description: "一閃で相手を真っ二つにし、斬り抜けて3マス先に着地する。3マス先が空いていないと使えない。",
         targeting: {
             type: "direction",
-            range: 2,
+            range: 3,
             targetCount: "all",
             targetSide: "enemy"
         }
@@ -261,7 +261,7 @@ const characterDatabase = [
         move: 4,
         description: "りおんが我が道往くためにデスカンチョーに堕ちた姿。",
         type: "attacker",
-        skills: [1, 2, 4, 5],
+        skills: [1, 2, 4, 16],
         song: "../audio/death.mp3"
     },
     {
@@ -287,7 +287,7 @@ const characterDatabase = [
         move: 4,
         description: "弱っちい。なぜなら女だから。",
         type: "healer",
-        skills: [1, 3, 7, 10],
+        skills: [1, 3, 7, 16],
         song: "../audio/momoko.mp3"
     },
     {
