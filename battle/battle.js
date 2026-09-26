@@ -1007,7 +1007,7 @@ function showYourTurnCutIn() {
  * [FX] 技のエフェクト(命中→ネガポジ→撃破!!)を先に見せてからカットインを出すため、
  * 少し遅らせて表示する。
  */
-const KILL_CUT_IN_DELAY_MS = 450;
+const KILL_CUT_IN_DELAY_MS = 800;
 
 function showKillCutIn(attacker) {
     if (!attacker) {
@@ -4227,10 +4227,222 @@ function getSkillTargetsFromCells(unit, skill, cells) {
     return targets;
 }
 
+/* ========================================
+   SKILL MOVES (攻撃＋移動)
+
+   技データに
+       move: { type: "land_ahead", distance: 3 }
+   のように書くと、技の効果のあとに移動が起きる。
+   移動のしかたは下の SKILL_MOVES に「型」として登録してあり、
+   新しい動きを作るときはここに1つ足すだけでよい
+   (SKILL_EFFECTS と同じ考え方)。
+
+   各型が持つもの
+     plan(unit, skill, ctx)
+         技を撃つ前に呼ばれ、「誰をどこへ動かすか」を返す。
+           return [{ unit, to: { row, column } }, ...]
+         動けない場合は null を返す。
+         ctx = { direction, targets, params }
+           direction … 方向指定の技なら "up"/"down"/"left"/"right"、それ以外は null
+           targets   … この技が当たる予定の生きたコマ
+           params    … 技データの move オブジェクト(distance など)
+     apply(moves)   (省略可)
+         技の効果のあとに呼ばれ、実際に動かす。省略すると、
+         「動かす本人が生きていて、行き先が空いていれば移動」する。
+     describe(params)
+         ホバー詳細に出す説明文。
+
+   move.required (既定 true)
+     true なら、plan が null になる状況(方向)ではその技を撃てない。
+     false なら、動けなくても技だけは撃てる(移動なし)。
+
+   移動は技の演出(斬り抜けの残像)付きで、行き先が敵の城なら
+   通常の移動と同じく城を落とす。中央の城の占拠判定も通常どおり。
+======================================== */
+
+// 壁・存在しないマス・盤面外を通らずに、direction へ distance マス進んだ先。
+// requireEmpty=true なら着地点に生きたコマがいると null。途中のコマは通り抜けられる。
+function getStraightDestination(from, direction, distance, requireEmpty = true) {
+    const offset = getDirectionOffsets(direction);
+    const steps = Number(distance) || 0;
+
+    if (!offset || steps <= 0) {
+        return null;
+    }
+
+    for (let step = 1; step <= steps; step++) {
+        if (!isPlayableCell(from.row + offset.row * step, from.column + offset.column * step)) {
+            return null;
+        }
+    }
+
+    const to = {
+        row: from.row + offset.row * steps,
+        column: from.column + offset.column * steps
+    };
+
+    if (requireEmpty && getUnitAt(to.row, to.column)) {
+        return null;
+    }
+
+    return to;
+}
+
+const OPPOSITE_DIRECTION = { up: "down", down: "up", left: "right", right: "left" };
+
+const SKILL_MOVES = {
+
+    // 撃った方向へ distance マス先に着地(斬り抜け)。途中のコマは通り抜ける。
+    land_ahead: {
+        plan(unit, skill, { direction, params }) {
+            const to = getStraightDestination(unit, direction, params.distance ?? 3);
+            return to ? [{ unit, to }] : null;
+        },
+        describe: params => `撃った方向へ${params.distance ?? 3}マス先に着地`
+    },
+
+    // 撃った方向と逆へ distance マス下がる(ヒット＆アウェイ)。途中にコマがいたら下がれない。
+    step_back: {
+        plan(unit, skill, { direction, params }) {
+            const back = OPPOSITE_DIRECTION[direction];
+            const distance = params.distance ?? 1;
+
+            for (let step = 1; step <= distance; step++) {
+                const cell = getStraightDestination(unit, back, step);
+                if (!cell) return null;
+            }
+
+            return [{ unit, to: getStraightDestination(unit, back, distance) }];
+        },
+        describe: params => `撃った後、${params.distance ?? 1}マス後ろへ下がる`
+    },
+
+    // 最初に当たる相手と位置を入れ替える。
+    swap_with_target: {
+        plan(unit, skill, { targets }) {
+            const partner = targets.find(target => target.alive && target.unitId !== unit.unitId);
+
+            if (!partner) return null;
+
+            return [
+                { unit, to: { row: partner.row, column: partner.column } },
+                { unit: partner, to: { row: unit.row, column: unit.column } }
+            ];
+        },
+        // 入れ替えは行き先が相手で埋まっているので、専用の動かし方をする
+        apply(moves) {
+            if (moves.some(move => !move.unit.alive)) {
+                return [];
+            }
+
+            moves.forEach(move => {
+                move.from = { row: move.unit.row, column: move.unit.column };
+            });
+
+            moves.forEach(move => {
+                move.unit.row = move.to.row;
+                move.unit.column = move.to.column;
+            });
+
+            return moves;
+        },
+        describe: () => "当たった相手と位置を入れ替える"
+    }
+};
+
+function getSkillMoveDefinition(skill) {
+    const params = skill?.move;
+
+    if (!params || typeof params !== "object") {
+        return null;
+    }
+
+    const definition = SKILL_MOVES[params.type];
+
+    if (!definition) {
+        console.error(
+            `技 "${skill.name}"（id=${skill.id}）の move.type="${params.type}" は SKILL_MOVES に登録されていません。`
+        );
+        return null;
+    }
+
+    return { definition, params };
+}
+
+function planSkillMove(unit, skill, direction) {
+    const entry = getSkillMoveDefinition(skill);
+
+    if (!entry) {
+        return null;
+    }
+
+    const cells = getSkillCandidateCells(unit, skill, direction);
+    const targets = getSkillTargetsFromCells(unit, skill, cells)
+        .filter(target => target.alive);
+
+    return entry.definition.plan(unit, skill, {
+        direction: direction || null,
+        targets,
+        params: entry.params
+    });
+}
+
+// この技をこの方向(方向指定でなければ null)で撃てるか(移動の条件だけを見る)
+function canPerformSkillMove(unit, skill, direction) {
+    const entry = getSkillMoveDefinition(skill);
+
+    if (!entry || entry.params.required === false) {
+        return true;
+    }
+
+    return !!planSkillMove(unit, skill, direction);
+}
+
+// 技の効果のあとに移動を実行する。動いたものは演出とログに記録する。
+function performSkillMove(skill, plannedMoves) {
+    const entry = getSkillMoveDefinition(skill);
+
+    if (!entry || !plannedMoves || battleState.gameOver) {
+        return;
+    }
+
+    const apply =
+        entry.definition.apply ||
+        (moves => moves.filter(move => {
+            if (!move.unit.alive || getUnitAt(move.to.row, move.to.column)) {
+                return false;
+            }
+
+            move.from = { row: move.unit.row, column: move.unit.column };
+            move.unit.row = move.to.row;
+            move.unit.column = move.to.column;
+            return true;
+        }));
+
+    const moved = apply(plannedMoves) || [];
+
+    moved.forEach(move => {
+        recordFx({ type: "dash", from: move.from, to: move.to });
+        addBattleLog(`${move.unit.name}が(${move.to.row},${move.to.column})へ移動した！`);
+    });
+
+    // 行き先が敵の城なら、通常の移動と同じく城を落とす
+    moved.forEach(move => {
+        if (!battleState.gameOver) {
+            checkCastleVictory(move.unit);
+        }
+    });
+}
+
 function getAvailableDirections(unit, skill) {
     const directions = ["up", "down", "left", "right"];
 
     return directions.filter(direction => {
+        // [攻撃＋移動] 移動できない方向には撃てない(move.required が false の技は除く)
+        if (!canPerformSkillMove(unit, skill, direction)) {
+            return false;
+        }
+
         const cells = getSkillCandidateCells(
             unit,
             skill,
@@ -4257,6 +4469,11 @@ function hasSkillTargets(unit, skill) {
 
     if (targeting.type === "direction") {
         return getAvailableDirections(unit, skill).length > 0;
+    }
+
+    // [攻撃＋移動] 方向指定でない技も、移動できない状況なら撃てない
+    if (!canPerformSkillMove(unit, skill, null)) {
+        return false;
     }
 
     const candidateCells = getSkillCandidateCells(unit, skill);
@@ -5468,6 +5685,15 @@ function executeSkill(
 
     startSkillFx(unit, skill, targetCells);
 
+    // [攻撃＋移動] 誰をどこへ動かすかは、技を撃つ前の配置で決める
+    const plannedMoves = getSkillMoveDefinition(skill)
+        ? planSkillMove(
+            unit,
+            skill,
+            getSkillTargeting(skill).type === "direction" ? battleState.skillDirection : null
+        )
+        : null;
+
     applySkillEffect(
         unit,
         skill,
@@ -5475,6 +5701,9 @@ function executeSkill(
         deadTargets,
         multiplier
     );
+
+    // [攻撃＋移動] 技の効果のあとに移動(行き先が埋まった・本人が倒れた場合は動かない)
+    performSkillMove(skill, plannedMoves);
 
     finishSkillFx();
 
@@ -6193,6 +6422,12 @@ function buildUnitDetailHtml(unit) {
                             <span>命中 <b>${accuracy}%</b></span>
                             <span>範囲 <b>${escapeHtml(rangeText)}</b></span>
                             <span>対象 <b>${escapeHtml(targetText)}</b></span>
+                            ${(() => {
+                                const entry = getSkillMoveDefinition(skill);
+                                return entry
+                                    ? `<span>移動 <b>${escapeHtml(entry.definition.describe?.(entry.params) || entry.params.type)}</b></span>`
+                                    : "";
+                            })()}
                         </div>
                         <p class="unit-detail-skill-desc">
                             ${escapeHtml(skill.description || "説明はまだありません。")}

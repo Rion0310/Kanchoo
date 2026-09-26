@@ -2010,31 +2010,18 @@ body.multiplayer-3plus .player-status-2.slot-solo {
     color: #777777;
 }
 
+/*
+ * [BUGFIX / ホバーで行動ボタンが大きくなる件]
+ * 以前はここに flex / width:max-content / height / padding などの
+ * レイアウト指定まで書かれていたため、ホバーした瞬間だけ
+ * 「.action-buttons button { flex: 1 1 0 }」の均等幅が上書きされ、
+ * そのボタンだけ文字幅に合わせて伸び縮みしていた。
+ * ホバーでは色だけを変える。
+ */
 .skill-button:hover {
-
-    flex: 0 0 auto;
-    width: max-content;
-    min-width: 80px;
-    height: 34px;
-    padding: 0 10px;
-
     background: #292929;
     border-color: #666666;
     color: #ffffff;
-
-    font-family: inherit;
-    font-size: 10px;
-    font-weight: 700;
-
-    cursor: pointer;
-
-    white-space: normal;
-    overflow: hidden;
-    text-overflow: clip;
-    line-height: 1.15;
-    text-align: center;
-
-    box-sizing: border-box;
 }
 
 
@@ -5127,4 +5114,47 @@ body.multiplayer-3plus .player-status-2.slot-solo {
         padding: 4px 6px;
         font-size: 9px;
     }
+}
+
+/* ---------- 斬撃(cleave): 真っ二つ ---------- */
+
+/* 切り口に沿って走る一閃 */
+.fx-cleave-line {
+    width: calc(var(--cell) * 2.6);
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #ffffff 30%, #ffffff 70%, transparent);
+    box-shadow: 0 0 10px #ffffff, 0 0 22px var(--color);
+    animation: fx-cleave-line 0.52s cubic-bezier(.2,.9,.3,1) forwards;
+}
+
+@keyframes fx-cleave-line {
+    0%   { transform: translate(-50%, -50%) rotate(var(--rot)) scaleX(0); opacity: 1; }
+    30%  { transform: translate(-50%, -50%) rotate(var(--rot)) scaleX(1); opacity: 1; }
+    100% { transform: translate(-50%, -50%) rotate(var(--rot)) scaleX(1.15) scaleY(0.3); opacity: 0; }
+}
+
+/* 割れたアイコンの片割れ(位置と大きさはJSで本物のアイコンに合わせる) */
+.fx-cleave-half {
+    transform: none;
+    z-index: 4;
+}
+
+/* ---------- 突進着地(dashLanding): 斬り抜けた跡 ---------- */
+
+.fx-dash-trail {
+    height: calc(var(--cell) * 0.5);
+    transform: translate(0, -50%) rotate(var(--rot));
+    transform-origin: 0 50%;
+    background:
+        linear-gradient(90deg, transparent, var(--color) 40%, rgba(255, 255, 255, 0.9) 85%, transparent);
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000000 35%, #000000 65%, transparent);
+    mask-image: linear-gradient(180deg, transparent, #000000 35%, #000000 65%, transparent);
+    mix-blend-mode: screen;
+    animation: fx-dash-trail 0.52s ease-out forwards;
+}
+
+@keyframes fx-dash-trail {
+    0%   { clip-path: inset(0 100% 0 0); opacity: 1; }
+    40%  { clip-path: inset(0 0 0 0); opacity: 0.9; }
+    100% { clip-path: inset(0 0 0 0); opacity: 0; transform: translate(0, -50%) rotate(var(--rot)) scaleY(0.2); }
 }

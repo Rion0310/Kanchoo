@@ -200,6 +200,29 @@ const skillDatabase = [
             targetSide: "enemy"
         }
     },
+    {
+        id: 16,
+        name: "斬チョー",
+        type: "物理",
+        power: 70,
+        effect: "damage",
+        // [FX] 当たった相手のアイコンが真っ二つに割れてずれる演出(battle-fx.js の cleave)
+        fx: "cleave",
+        /*
+         * [攻撃＋移動] 撃った方向へ3マス先に着地する。
+         * 3マス先が空いていない方向には撃てない(required の既定は true)。
+         * 使える type は battle.js の SKILL_MOVES を参照
+         * (land_ahead / step_back / swap_with_target)。
+         */
+        move: { type: "land_ahead", distance: 3 },
+        description: "一閃で相手を真っ二つにし、斬り抜けて3マス先に着地する。3マス先が空いていないと使えない。",
+        targeting: {
+            type: "direction",
+            range: 2,
+            targetCount: "all",
+            targetSide: "enemy"
+        }
+    },
 
 ];
 

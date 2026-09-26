@@ -47,6 +47,15 @@ const HEAVY_DAMAGE_RATIO = 0.5;
  *   FLASH_OPACITY       … 白/金色の全画面フラッシュの濃さ(0〜1)
  */
 const NEGAPOSI_TIMES = 1;
+
+/*
+ * 斬撃(cleave)で、アイコンをどちら向きに切るか。
+ *   "parallel"      … 攻撃の向きに沿って切る
+ *                      (左右から斬る → 横一文字に切って上下に割れる /
+ *                       上下から斬る → 縦に切って左右に割れる)
+ *   "perpendicular" … 攻撃の向きと直角に切る(上の逆)
+ */
+const CLEAVE_CUT = "parallel";
 const NEGAPOSI_ONLY_ON_KILL = true;
 const FLASH_OPACITY = 0.3;
 
@@ -113,6 +122,8 @@ const EFFECT_STYLES = {
  * 技ごとに個別の演出を指定したい場合は skillDatabase の技に
  *   fx: "explosion"
  * のように書けば、EFFECT_STYLES より優先される。
+ * 選べる型: strike / pierce / explosion / curse / cleave(真っ二つ) /
+ *           holy / heal / dark / charge / speed / guard
  */
 function pickStyle(fx) {
     if (fx.fxStyle) return fx.fxStyle;
@@ -122,6 +133,7 @@ function pickStyle(fx) {
 
 const ONOMATOPOEIA = {
     strike: ["ドカッ!!", "バキッ!!", "ズバッ!!", "ドゴッ!!"],
+    cleave: ["ズバァッ!!", "斬!!"],
     pierce: ["ズドン!!", "ブスッ!!", "貫通!!"],
     curse: ["ゴゴゴ…", "ズズン…"],
     explosion: ["ドゴォォン!!!", "ボガァン!!!"],
@@ -454,6 +466,164 @@ function animateKnockback(ctx, event) {
     }
 }
 
+/* ---------- 斬撃: アイコンが真っ二つに割れてずれる ---------- */
+
+/*
+ * 命中したコマのアイコンを2枚に複製し、切り口で上下(または左右)に分けて
+ * ずらす。本物のアイコンは演出の間だけ隠す。
+ * ・生き残った場合: ずれた後、元の位置に戻ってくっつく
+ * ・撃破した場合: 割れたまま崩れ落ちて消える(後ろに灰色の死体アイコンが残る)
+ */
+function cleave(ctx, layer, attackerBox, event, box, color) {
+    // 画面上の攻撃の向き(反転表示後の見た目で判定)
+    const dx = attackerBox ? box.x - attackerBox.x : 1;
+    const dy = attackerBox ? box.y - attackerBox.y : 0;
+    const horizontalAttack = Math.abs(dx) >= Math.abs(dy);
+
+    // horizontalCut = 横一文字(上下に割れる)
+    const horizontalCut =
+        CLEAVE_CUT === "parallel" ? horizontalAttack : !horizontalAttack;
+
+    // 斬り抜けた方向(+1 / -1)。上半分(または右半分)がこちらへずれる
+    const along = Math.sign(horizontalAttack ? dx : dy) || 1;
+
+    // 切り口に沿った一閃
+    spawn(layer, "fx-cleave-line", box, {
+        "--rot": horizontalCut ? "0deg" : "90deg",
+        "--color": color
+    }, 520);
+    sparks(layer, box, color, 8);
+
+    const cell = ctx.getCell(event.row, event.column);
+    const icon = cell?.querySelector(".board-unit-icon");
+
+    if (!icon || isOff()) {
+        return;
+    }
+
+    const iconRect = icon.getBoundingClientRect();
+    const baseRect = ctx.wrapper.getBoundingClientRect();
+
+    const makeHalf = clip => {
+        const half = document.createElement("div");
+        half.className = "fx fx-cleave-half";
+        half.style.left = `${iconRect.left - baseRect.left}px`;
+        half.style.top = `${iconRect.top - baseRect.top}px`;
+        half.style.width = `${iconRect.width}px`;
+        half.style.height = `${iconRect.height}px`;
+        half.style.clipPath = clip;
+
+        const copy = icon.cloneNode(true);
+        copy.removeAttribute("id");
+        Object.assign(copy.style, {
+            position: "absolute",
+            left: "0",
+            top: "0",
+            width: "100%",
+            height: "100%",
+            transform: "none",
+            margin: "0"
+        });
+
+        half.appendChild(copy);
+        layer.appendChild(half);
+
+        return half;
+    };
+
+    // 切り口に少し隙間ができないよう、半分ずつ重ねて切る
+    const first = makeHalf(horizontalCut ? "inset(0 0 50% 0)" : "inset(0 50% 0 0)");   // 上 / 左
+    const second = makeHalf(horizontalCut ? "inset(50% 0 0 0)" : "inset(0 0 0 50%)");  // 下 / 右
+
+    icon.style.visibility = "hidden";
+
+    const shift = iconRect.width * 0.38;
+    const gap = iconRect.width * 0.08;
+
+    // 横一文字: 上半分が攻撃方向へ横にずれ、少し持ち上がる
+    // 縦切り : 右半分が攻撃方向へ縦にずれ、少し横に開く
+    const firstMove = horizontalCut
+        ? { x: shift * along, y: -gap, r: 4 * along }
+        : { x: -gap, y: -shift * along * 0.4, r: -4 * along };
+    const secondMove = horizontalCut
+        ? { x: -shift * along * 0.35, y: gap, r: -2 * along }
+        : { x: gap, y: shift * along, r: 4 * along };
+
+    const toTransform = (m, extra = "") =>
+        `translate(${m.x}px, ${m.y}px) rotate(${m.r}deg) ${extra}`;
+
+    const duration = event.killed ? 1200 : 900;
+
+    const keyframes = (m, killed) => killed
+        ? [
+            { transform: "translate(0, 0)", opacity: 1, offset: 0 },
+            { transform: "translate(0, 0)", opacity: 1, offset: 0.12 },
+            { transform: toTransform(m), opacity: 1, offset: 0.35 },
+            { transform: toTransform({ x: m.x * 1.3, y: m.y + iconRect.height * 0.6, r: m.r * 4 }), opacity: 0, filter: "grayscale(1)", offset: 1 }
+        ]
+        : [
+            { transform: "translate(0, 0)", offset: 0 },
+            { transform: "translate(0, 0)", offset: 0.15 },
+            { transform: toTransform(m), offset: 0.4 },
+            { transform: toTransform(m), offset: 0.7 },
+            { transform: "translate(0, 0)", offset: 1 }
+        ];
+
+    const easing = "cubic-bezier(.2,.9,.3,1)";
+
+    first.animate(keyframes(firstMove, event.killed), { duration, easing, fill: "forwards" });
+    const last = second.animate(keyframes(secondMove, event.killed), { duration, easing, fill: "forwards" });
+
+    const restore = () => {
+        first.remove();
+        second.remove();
+
+        // 再描画でアイコンが作り直されていても、残っていれば表示を戻す
+        icon.style.visibility = "";
+    };
+
+    last.onfinish = restore;
+    setTimeout(restore, duration + 200);
+}
+
+
+/* ---------- 突進着地: 使用者が斬り抜けて着地する ---------- */
+
+function animateDash(ctx, layer, event, color) {
+    if (isOff()) return;
+
+    const from = cellBox(ctx, event.from.row, event.from.column);
+    const to = cellBox(ctx, event.to.row, event.to.column);
+
+    if (!from || !to) return;
+
+    // 通り道に残る残像のライン
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+
+    spawn(layer, "fx-dash-trail", from, {
+        width: `${Math.hypot(dx, dy)}px`,
+        "--rot": `${Math.atan2(dy, dx)}rad`,
+        "--color": color
+    }, 520);
+
+    // 本物のアイコンを元の位置から着地先まで一気に滑らせる
+    const icon = ctx.getCell(event.to.row, event.to.column)
+        ?.querySelector("img.board-unit-icon:not(.dead)");
+
+    icon?.animate(
+        [
+            { transform: `translate(calc(-50% + ${from.x - to.x}px), calc(-50% + ${from.y - to.y}px))`, filter: "brightness(1.8)" },
+            { transform: "translate(-50%, -50%) scale(1.12)", filter: "brightness(1.4)", offset: 0.6 },
+            { transform: "translate(-50%, -50%) scale(1)", filter: "none" }
+        ],
+        { duration: 260, easing: "cubic-bezier(.3,1,.4,1)" }
+    );
+
+    spawn(layer, "fx-dust", to, {}, 600);
+}
+
+
 /* ---------- メイン ---------- */
 
 async function playSkill(fx, ctx) {
@@ -490,7 +660,9 @@ async function playSkill(fx, ctx) {
 
     // 2) 方向指定の技は射線を走らせる
     const firstHit = fx.events.find(e => e.row != null);
-    if (attackerBox && fx.targeting === "direction" && fx.targetCells?.length) {
+    const hasDash = fx.events.some(e => e.type === "dash");
+
+    if (!hasDash && attackerBox && fx.targeting === "direction" && fx.targetCells?.length) {
         const last = fx.targetCells[fx.targetCells.length - 1];
         const endBox = cellBox(ctx, last.row, last.column);
         if (endBox) beam(layer, attackerBox, endBox, color);
@@ -499,7 +671,7 @@ async function playSkill(fx, ctx) {
     await wait(fx.targeting === "direction" ? 140 : 110);
 
     // 3) 技の型ごとの演出
-    if (["strike", "pierce", "curse", "explosion"].includes(style)) {
+    if (["strike", "pierce", "curse", "explosion", "cleave"].includes(style)) {
         if (heavy) {
             if (!NEGAPOSI_ONLY_ON_KILL || style === "explosion" || killed) {
                 negaPosi();
@@ -520,7 +692,8 @@ async function playSkill(fx, ctx) {
         const firstBox = firstHit ? cellBox(ctx, firstHit.row, firstHit.column) : null;
 
         if (firstBox) {
-            if (heavy) concentrationLines(layer, firstBox);
+            // 斬撃は割れたアイコンを見せたいので集中線は出さない
+            if (heavy && style !== "cleave") concentrationLines(layer, firstBox);
             popText(
                 layer,
                 firstBox,
@@ -567,6 +740,11 @@ async function playSkill(fx, ctx) {
             return;
         }
 
+        if (event.type === "dash") {
+            animateDash(ctx, layer, event, color);
+            return;
+        }
+
         if (event.row == null) return;
 
         const box = cellBox(ctx, event.row, event.column);
@@ -574,8 +752,19 @@ async function playSkill(fx, ctx) {
 
         switch (event.type) {
             case "damage":
-                setTimeout(() => impact(layer, box, color, heavy), delay);
-                popNumber(layer, box, `-${event.amount}`, event.amount >= 40 ? "is-big" : "", delay + 40);
+                if (style === "cleave") {
+                    setTimeout(() => cleave(ctx, layer, attackerBox, event, box, color), delay);
+                } else {
+                    setTimeout(() => impact(layer, box, color, heavy), delay);
+                }
+                // 斬撃は割れる瞬間を隠さないよう、数字を割れ終わってから出す
+                popNumber(
+                    layer,
+                    box,
+                    `-${event.amount}`,
+                    event.amount >= 40 ? "is-big" : "",
+                    delay + (style === "cleave" ? 520 : 40)
+                );
                 if (event.killed) popText(layer, box, "撃破!!", "is-kill", delay + 200);
                 break;
             case "heal":
