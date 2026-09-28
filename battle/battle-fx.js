@@ -783,6 +783,10 @@ async function playSkill(fx, ctx) {
                 popNumber(layer, box, `+${event.amount}`, "is-heal", delay);
                 spawn(layer, "fx-heal", box, {}, 1000);
                 break;
+            case "vanish":
+                // 蘇生済みのコマが倒れて死体ごと消える
+                setTimeout(() => spawn(layer, "fx-implode", box, {}, 1000), delay + 250);
+                break;
             case "necro":
                 // 死体から紫の霊気が立ち昇る(型"necro"側でも出るので、ここでは渦だけ)
                 spawn(layer, "fx-necro-swirl", box, {}, 1100);

@@ -34,7 +34,7 @@ const skillDatabase = [
         type: "回復",
         power: 0,
         effect: "revive",
-        description: "移動可能範囲内の死体を一人、HPMAXで蘇らせる。",
+        description: "移動可能範囲内の死体を一人、HPMAXで蘇らせる。蘇ったキャラは次に倒れると死体が残らない。",
         targeting: {
             type: "move_range",
             targetCount: "single",
@@ -99,7 +99,7 @@ const skillDatabase = [
         type: "変化技",
         power: 0,
         effect: "move_buff_all_allies",
-        description: "そのターンの間、すべての味方の移動範囲を1上げる。",
+        description: "そのターンの間、すべての味方の移動範囲を2上げる。",
         targeting: {
             type: "all_map",
             targetCount: "all",
@@ -190,7 +190,7 @@ const skillDatabase = [
     {
         id: 15,
         name: "ジェットカンチョー",
-        power: 40,
+        power: 30,
         effect: "damage_scale_with_move_distance",
         description: "助走をつけた分だけ威力が上がる",
         targeting: {
@@ -204,7 +204,7 @@ const skillDatabase = [
         id: 16,
         name: "斬チョー",
         type: "物理",
-        power: 100,
+        power: 120,
         effect: "damage",
         // [FX] 当たった相手のアイコンが真っ二つに割れてずれる演出(battle-fx.js の cleave)
         fx: "cleave",
@@ -231,10 +231,10 @@ const skillDatabase = [
         /*
          * 移動範囲内の敵の死体を、このターンだけ自分の傀儡として蘇らせて操る。
          * 城は落とせず、中央の城の占拠にも数えず、ブラフも使えない。
-         * ターン終了時に元居た場所で死体に戻る。
+         * ターン終了時に死体ごと消える(一度蘇った扱い)。
          */
         effect: "necro_puppet",
-        description: "敵の死体をこのターンだけ傀儡として蘇らせて操る。城は落とせず、ターン終了で元の場所の死体に戻る。",
+        description: "敵の死体をこのターンだけ傀儡として蘇らせて操る。城は落とせず、ターン終了時に死体ごと消える。",
         targeting: {
             type: "move_range",
             targetCount: "single",

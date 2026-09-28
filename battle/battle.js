@@ -2393,6 +2393,9 @@ function eliminatePlayer(player, reason) {
 
 function checkVictoryCondition() {
 
+    // [蘇生済みの死体の除去] 倒れた蘇生済みのコマを消す(決着後でも消す)
+    purgeSpentCorpses();
+
     if (battleState.gameOver) {
         return true;
     }
@@ -3570,6 +3573,9 @@ function areAllCurrentPlayerUnitsActed() {
 }
 
 function finishUnitAction() {
+
+    // [蘇生済みの死体の除去]
+    purgeSpentCorpses();
 
     // [中央の城] 行動が確定したこのタイミングで占拠状態を判定する
     updateCenterHold();
@@ -5316,6 +5322,9 @@ function reviveTarget(target, hp) {
         Math.max(1, hp)
     );
 
+    // [蘇生済み] 次に倒れたら死体を残さず消える(purgeSpentCorpses)
+    target.revivedOnce = true;
+
     recordFx({ type: "revive", row: target.row, column: target.column });
 }
 
@@ -5329,6 +5338,38 @@ function removeTarget(target) {
     if (index >= 0) {
         battleState.units.splice(index, 1);
     }
+}
+
+/*
+ * [蘇生済みの死体の除去]
+ * 一度アライブカンチョーで蘇生された・ネクロカンチョーで傀儡にされたコマ
+ * (revivedOnce)は、次に倒れたら死体を残さずその場で消える。
+ * デッドカンチョーで消したときと同じく、以後は蘇生も傀儡化もできない。
+ *
+ * 倒れ方(通常の攻撃・脱糞の反射・神風の自爆・脱落による全滅など)が
+ * いろいろあるので、倒した処理ごとではなく「倒れた後に必ず通る所」
+ * (checkVictoryCondition / finishUnitAction / endTurn)でまとめて掃除する。
+ */
+function purgeSpentCorpses() {
+    const spent = battleState.units.filter(
+        unit => !unit.alive && unit.revivedOnce
+    );
+
+    spent.forEach(unit => {
+        recordFx({ type: "vanish", row: unit.row, column: unit.column });
+
+        // 傀儡のまま倒れた場合もここで消える(ターン終了時の復帰は不要になる)
+        delete unit.puppet;
+
+        battleState.bluffUnits.delete(unit.unitId);
+        battleState.movedUnits.delete(unit.unitId);
+
+        removeTarget(unit);
+
+        addBattleLog(`${unit.name}の死体は崩れ去った…（一度蘇った者は二度と戻らない）`);
+    });
+
+    return spent.length > 0;
 }
 
 function damage_scale_with_move_distance(unit, skill, { enemies }, multiplier){
@@ -5468,7 +5509,7 @@ const SKILL_EFFECTS = {
      * [ネクロカンチョー] 敵の死体を、このターンだけ自分の傀儡として蘇らせる。
      * ・蘇った傀儡は自分のコマとして移動・技が使える(このターンまだ未行動扱い)
      * ・城を落とせない / 中央の城の占拠に数えない / ブラフは使えない
-     * ・ターン終了時に元居た場所へ戻り、死体に戻る(releasePuppets)
+     * ・ターン終了時に死体ごと消える(releasePuppets)。一度蘇った扱い(revivedOnce)
      * 死体の上に生きたコマが乗っている場合は蘇らせられない。
      */
     necro_puppet: (unit, skill, { deadTargets }) => {
@@ -5499,6 +5540,9 @@ const SKILL_EFFECTS = {
         target.player = Number(unit.player);
         target.alive = true;
         target.hp = target.maxHp;
+
+        // [蘇生済み] 傀儡にされた死体は、ターン終了時に元へ戻らず消える
+        target.revivedOnce = true;
         target.bluffType = null;
         target.guardNextTurn = false;
         target.lastSkillId = null;
@@ -6459,7 +6503,9 @@ function buildUnitDetailHtml(unit) {
     }
 
     if (unit.puppet) {
-        tags.push(`<span class="unit-detail-tag is-puppet">傀儡（${escapeHtml(getPlayerDisplayName(unit.puppet.controller))}が操作中・ターン終了で死体に戻る）</span>`);
+        tags.push(`<span class="unit-detail-tag is-puppet">傀儡（${escapeHtml(getPlayerDisplayName(unit.puppet.controller))}が操作中・ターン終了で消える）</span>`);
+    } else if (unit.revivedOnce && unit.alive) {
+        tags.push(`<span class="unit-detail-tag is-puppet">蘇生済み（次に倒れると死体が残らない）</span>`);
     }
 
     // ブラフは自分のユニットにだけ見せる（相手には区別させない）
@@ -6700,32 +6746,21 @@ function setupUnitDetailHover() {
  * 操っていたプレイヤーのターン終了時(endTurn)に呼ぶ。
  */
 function releasePuppets(controller) {
+    /*
+     * [蘇生済みの死体の除去]
+     * 傀儡にされたコマは「一度蘇ったコマ」なので、ターン終了時に
+     * 元の場所の死体へ戻すのではなく、死体ごと盤面から消す。
+     * (傀儡のまま倒れていた場合は、倒れた時点で purgeSpentCorpses が消している)
+     */
     battleState.units
         .filter(unit => unit.puppet && Number(unit.puppet.controller) === Number(controller))
         .forEach(unit => {
-            const puppet = unit.puppet;
-
-            if (unit.moveBuffAmount) {
-                unit.move -= unit.moveBuffAmount;
-                unit.moveBuffAmount = 0;
-            }
-
-            unit.player = puppet.originalPlayer;
-            unit.row = puppet.row;
-            unit.column = puppet.column;
-            unit.alive = false;
-            unit.hp = 0;
-            unit.bluffType = null;
-            unit.guardNextTurn = false;
-            unit.nextPowerMultiplier = 1;
-            unit.nextPowerTurn = null;
-            unit.lastSkillId = puppet.lastSkillId;
-            delete unit.puppet;
-
             battleState.bluffUnits.delete(unit.unitId);
             battleState.movedUnits.delete(unit.unitId);
 
-            addBattleLog(`${unit.name}の傀儡が解け、元の場所で死体に戻った`);
+            removeTarget(unit);
+
+            addBattleLog(`${unit.name}の傀儡が解け、死体は崩れ去った…`);
         });
 }
 
@@ -6863,8 +6898,11 @@ function endTurn() {
 
     battleState.movedUnits.clear();
 
-    // [ネクロカンチョー] このターンの傀儡を元の死体に戻す
+    // [ネクロカンチョー] このターンの傀儡を解く(死体ごと消える)
     releasePuppets(currentPlayerNumberForSkip);
+
+    // [蘇生済みの死体の除去] 念のためここでも掃除する
+    purgeSpentCorpses();
 
     // 傀儡が中央の城から消えた分も含めて占拠状態を更新
     updateCenterHold();
